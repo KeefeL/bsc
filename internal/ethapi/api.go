@@ -1103,6 +1103,7 @@ func (s *PublicBlockChainAPI) GetDiffAccounts(ctx context.Context, blockNr rpc.B
 
 // GetDiffAccountsWithScope returns detailed changes of some interested accounts in a specific block number.
 func (s *PublicBlockChainAPI) GetDiffAccountsWithScope(ctx context.Context, blockNr rpc.BlockNumber, accounts []common.Address) (*types.DiffAccountsInBlock, error) {
+	log.Info("[GetDiffAccountsWithScope] debug 1", "num", blockNr.Int64())
 	if s.b.Chain() == nil {
 		return nil, fmt.Errorf("blockchain not support get diff accounts")
 	}
@@ -1111,15 +1112,18 @@ func (s *PublicBlockChainAPI) GetDiffAccountsWithScope(ctx context.Context, bloc
 	if err != nil {
 		return nil, fmt.Errorf("block not found for block number (%d): %v", blockNr, err)
 	}
+	log.Info("[GetDiffAccountsWithScope] debug 2", "num", blockNr.Int64())
 	parent, err := s.b.BlockByHash(ctx, block.ParentHash())
 	if err != nil {
 		return nil, fmt.Errorf("block not found for block number (%d): %v", blockNr-1, err)
 	}
+	log.Info("[GetDiffAccountsWithScope] debug 3", "num", blockNr.Int64())
 	statedb, err := s.b.Chain().StateAt(parent.Root())
 	if err != nil {
 		return nil, fmt.Errorf("state not found for block number (%d): %v", blockNr-1, err)
 	}
 
+	log.Info("[GetDiffAccountsWithScope] debug 4", "num", blockNr.Int64())
 	result := &types.DiffAccountsInBlock{
 		Number:       uint64(blockNr),
 		BlockHash:    block.Hash(),
@@ -1131,10 +1135,12 @@ func (s *PublicBlockChainAPI) GetDiffAccountsWithScope(ctx context.Context, bloc
 		accountSet[account] = struct{}{}
 	}
 
+	log.Info("[GetDiffAccountsWithScope] debug 5", "num", blockNr.Int64())
 	// Recompute transactions.
 	signer := types.MakeSigner(s.b.ChainConfig(), block.Number())
 	for _, tx := range block.Transactions() {
 		// Skip data empty tx and to is one of the interested accounts tx.
+		log.Info("[GetDiffAccountsWithScope] debug 6", "num", blockNr.Int64())
 		skip := false
 		if len(tx.Data()) == 0 {
 			skip = true
@@ -1156,6 +1162,7 @@ func (s *PublicBlockChainAPI) GetDiffAccountsWithScope(ctx context.Context, bloc
 			}
 		}
 
+		log.Info("[GetDiffAccountsWithScope] debug 7", "num", blockNr.Int64())
 		// Apply transaction
 		msg, _ := tx.AsMessage(signer)
 		txContext := core.NewEVMTxContext(msg)
@@ -1172,11 +1179,14 @@ func (s *PublicBlockChainAPI) GetDiffAccountsWithScope(ctx context.Context, bloc
 			}
 		}
 
+		log.Info("[GetDiffAccountsWithScope] debug 8", "num", blockNr.Int64())
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 			return nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 		}
+		log.Info("[GetDiffAccountsWithScope] debug 9", "num", blockNr.Int64())
 		statedb.Finalise(vmenv.ChainConfig().IsEIP158(block.Number()))
 
+		log.Info("[GetDiffAccountsWithScope] debug 10", "num", blockNr.Int64())
 		if !skip {
 			// Compute account balance diff.
 			for _, account := range accounts {
@@ -1192,6 +1202,7 @@ func (s *PublicBlockChainAPI) GetDiffAccountsWithScope(ctx context.Context, bloc
 		}
 	}
 
+	log.Info("[GetDiffAccountsWithScope] debug 11", "num", blockNr.Int64())
 	return result, nil
 }
 
