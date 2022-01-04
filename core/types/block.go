@@ -443,15 +443,64 @@ type DiffCode struct {
 	Code []byte
 }
 
+// DiffCodeSlice is used for sort
+type DiffCodeSlice []DiffCode
+
+func (s DiffCodeSlice) Len() int {
+	return len(s)
+}
+
+func (s DiffCodeSlice) Less(i, j int) bool {
+	return s[i].Hash.Hex() < s[j].Hash.Hex()
+}
+
+func (s DiffCodeSlice) Swap(i, j int) {
+	s[i].Hash, s[j].Hash = s[j].Hash, s[i].Hash
+	s[i].Code, s[j].Code = s[j].Code, s[i].Code
+}
+
 type DiffAccount struct {
 	Account common.Address
 	Blob    []byte
+}
+
+// DiffAccountSlice is used for sort
+type DiffAccountSlice []DiffAccount
+
+func (s DiffAccountSlice) Len() int {
+	return len(s)
+}
+
+func (s DiffAccountSlice) Less(i, j int) bool {
+	return s[i].Account.Hex() < s[j].Account.Hex()
+}
+
+func (s DiffAccountSlice) Swap(i, j int) {
+	s[i].Account, s[j].Account = s[j].Account, s[i].Account
+	s[i].Blob, s[j].Blob = s[j].Blob, s[i].Blob
 }
 
 type DiffStorage struct {
 	Account common.Address
 	Keys    []string
 	Vals    [][]byte
+}
+
+// DiffStorageSlice is used for sort
+type DiffStorageSlice []DiffStorage
+
+func (s DiffStorageSlice) Len() int {
+	return len(s)
+}
+
+func (s DiffStorageSlice) Less(i, j int) bool {
+	return s[i].Account.Hex() < s[j].Account.Hex()
+}
+
+func (s DiffStorageSlice) Swap(i, j int) {
+	s[i].Account, s[j].Account = s[j].Account, s[i].Account
+	s[i].Keys, s[j].Keys = s[j].Keys, s[i].Keys
+	s[i].Vals, s[j].Vals = s[j].Vals, s[i].Vals
 }
 
 type DiffAccountsInTx struct {

@@ -23,10 +23,13 @@ import (
 	"io"
 	"math/big"
 	mrand "math/rand"
+	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/crypto/sha3"
 
 	lru "github.com/hashicorp/golang-lru"
 
@@ -241,6 +244,8 @@ type BlockChain struct {
 
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
 	terminateInsert func(common.Hash, uint64) bool // Testing hook used to terminate ancient receipt chain insertion.
+
+	diffHashLog *os.File
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -301,6 +306,11 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	bc.processor = NewStateProcessor(chainConfig, bc, engine)
 
 	var err error
+	bc.diffHashLog, err = os.Create("diffhash.log")
+	if err != nil {
+		return nil, err
+	}
+
 	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.insertStopped)
 	if err != nil {
 		return nil, err
@@ -1635,6 +1645,81 @@ func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.
 	return bc.writeBlockWithState(block, receipts, logs, state, emitHeadEvent)
 }
 
+func (bc *BlockChain) computeDiffHash(block *types.Block) (common.Hash, error) {
+	rawData := bc.GetDiffLayerRLP(block.Hash())
+	if rawData == nil {
+		return common.Hash{}, fmt.Errorf("no diff layer")
+	}
+
+	hasher := sha3.NewLegacyKeccak256()
+	var diffHash common.Hash
+
+	// // verify node, set account root to nil and then compute diffhash
+	if !bc.stateCache.NoTries() {
+		var diff types.DiffLayer
+		err := rlp.DecodeBytes(rawData, &diff)
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("decode diff layer error: %v", err)
+		}
+
+		for index, account := range diff.Accounts {
+			full, err := snapshot.FullAccount(account.Blob)
+			if err != nil {
+				return common.Hash{}, fmt.Errorf("decode full account error: %v", err)
+			}
+			// set account root to empty root
+			diff.Accounts[index].Blob = snapshot.SlimAccountRLP(full.Nonce, full.Balance, common.Hash{}, full.CodeHash)
+		}
+
+		rawData, err = rlp.EncodeToBytes(&diff)
+		if err != nil {
+			return common.Hash{}, fmt.Errorf("encode new diff error: %v", err)
+		}
+	}
+
+	_, err := hasher.Write(rawData)
+	if err != nil {
+		return common.Hash{}, fmt.Errorf("hasher write error: %v", err)
+	}
+	hasher.Sum(diffHash[:0])
+
+	// debug
+	if block.NumberU64() == 1 || block.NumberU64() == 6 {
+		var diff types.DiffLayer
+		rlp.DecodeBytes(rawData, &diff)
+		s := fmt.Sprintf("%v\n\n\n", diff)
+		log.Error("[diffhash debug]:", s)
+
+		for _, account := range diff.Accounts {
+			full, _ := snapshot.FullAccount(account.Blob)
+			s := fmt.Sprintf("%v: %v\n", account.Account, common.BytesToHash(full.Root))
+			log.Error("[account root]:", s)
+		}
+
+	}
+
+	return diffHash, nil
+}
+
+func (bc *BlockChain) recordBlockDiffHash(block *types.Block) {
+	if block.NumberU64() > 500995 {
+		return
+	}
+
+	var s string
+	diffHash, err := bc.computeDiffHash(block)
+	if err != nil {
+		s = fmt.Sprintf("%v\t%v\t%v\n", block.NumberU64(), block.Hash(), err)
+	} else {
+		s = fmt.Sprintf("%v\t%v\t%v\n", block.NumberU64(), block.Hash(), diffHash)
+	}
+
+	_, err = bc.diffHashLog.WriteString(s)
+	if err != nil {
+		log.Error("Write diff hash log error: ", err)
+	}
+}
+
 // writeBlockWithState writes the block and all associated state to the database,
 // but is expects the chain mutex to be held.
 func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
@@ -1680,9 +1765,16 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		diffLayer.Receipts = receipts
 		diffLayer.BlockHash = block.Hash()
 		diffLayer.Number = block.NumberU64()
+		sort.Sort(types.DiffCodeSlice(diffLayer.Codes))
+		sort.Sort(common.AddressSlice(diffLayer.Destructs))
+		sort.Sort(types.DiffAccountSlice(diffLayer.Accounts))
+		sort.Sort(types.DiffStorageSlice(diffLayer.Storages))
 		bc.cacheDiffLayer(diffLayer)
 	}
 	triedb := bc.stateCache.TrieDB()
+
+	// Record diff hash
+	bc.recordBlockDiffHash(block)
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.TrieDirtyDisabled {
