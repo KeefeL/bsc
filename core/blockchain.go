@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/crypto/sha3"
+
 	lru "github.com/hashicorp/golang-lru"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -1680,6 +1682,12 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		diffLayer.Receipts = receipts
 		diffLayer.BlockHash = block.Hash()
 		diffLayer.Number = block.NumberU64()
+
+		sort.Sort(types.DiffCodeSlice(diffLayer.Codes))
+		sort.Sort(common.AddressSlice(diffLayer.Destructs))
+		sort.Sort(types.DiffAccountSlice(diffLayer.Accounts))
+		sort.Sort(types.DiffStorageSlice(diffLayer.Storages))
+
 		bc.cacheDiffLayer(diffLayer)
 	}
 	triedb := bc.stateCache.TrieDB()
@@ -3010,4 +3018,108 @@ func EnablePersistDiff(limit uint64) BlockChainOption {
 		chain.diffLayerFreezerBlockLimit = limit
 		return chain
 	}
+}
+
+func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Hash, diffHash common.Hash) (*types.VerifyResult, error) {
+	var res types.VerifyResult
+	res.BlockNumber = blockNumber
+	res.BlockHash = blockHash
+
+	if cached, ok := bc.diffLayerCache.Get(blockHash); ok {
+		diff := cached.(*types.DiffLayer)
+		if diff.DiffHash == (common.Hash{}) {
+			trustDiff, err := diff.GetVerificationRLP()
+			if err != nil {
+				res.Status = types.StatusUnexpectedError
+				return &res, err
+			}
+
+			hasher := sha3.NewLegacyKeccak256()
+			_, err = hasher.Write(trustDiff)
+			if err != nil {
+				res.Status = types.StatusUnexpectedError
+				return &res, err
+			}
+
+			var hash common.Hash
+			hasher.Sum(hash[:0])
+			diff.DiffHash = hash
+		}
+
+		if diffHash != diff.DiffHash {
+			res.Status = types.StatusDiffHashMismatch
+			return &res, nil
+		}
+
+		header := bc.GetHeaderByHash(blockHash)
+		if header == nil {
+			res.Status = types.StatusUnexpectedError
+			return &res, fmt.Errorf("unexpected error, header not found")
+		}
+		res.Status = types.StatusFullVerified
+		res.Root = header.Root
+		return &res, nil
+	}
+
+	if blockNumber > bc.CurrentHeader().Number.Uint64()+11 {
+		res.Status = types.StatusBlockTooNew
+		return &res, nil
+	} else if blockNumber > bc.CurrentHeader().Number.Uint64() {
+		res.Status = types.StatusBlockNewer
+		return &res, nil
+	}
+
+	diffStore := bc.db.DiffStore()
+	if diffStore != nil {
+		diff := rawdb.ReadDiffLayer(diffStore, blockHash)
+		if diff != nil {
+			if diff.DiffHash == (common.Hash{}) {
+				trustDiff, err := diff.GetVerificationRLP()
+				if err != nil {
+					res.Status = types.StatusUnexpectedError
+					return &res, err
+				}
+
+				hasher := sha3.NewLegacyKeccak256()
+				_, err = hasher.Write(trustDiff)
+				if err != nil {
+					res.Status = types.StatusUnexpectedError
+					return &res, err
+				}
+
+				var hash common.Hash
+				hasher.Sum(hash[:0])
+				diff.DiffHash = hash
+			}
+
+			if diffHash != diff.DiffHash {
+				res.Status = types.StatusDiffHashMismatch
+				return &res, nil
+			}
+
+			header := bc.GetHeaderByHash(blockHash)
+			if header == nil {
+				res.Status = types.StatusUnexpectedError
+				return &res, fmt.Errorf("unexpected error, header not found")
+			}
+			res.Status = types.StatusFullVerified
+			res.Root = header.Root
+			return &res, nil
+		}
+	}
+
+	header := bc.GetHeaderByHash(blockHash)
+	if header == nil {
+		if blockNumber > bc.CurrentHeader().Number.Uint64()-11 {
+			res.Status = types.StatusPossibleFork
+			return &res, nil
+		}
+
+		res.Status = types.StatusImpossibleFork
+		return &res, nil
+	}
+
+	res.Status = types.StatusUntrustedVerified
+	res.Root = header.Root
+	return &res, nil
 }
