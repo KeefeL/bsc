@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/eth/protocols/trust"
+
 	lru "github.com/hashicorp/golang-lru"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -3010,4 +3012,12 @@ func EnablePersistDiff(limit uint64) BlockChainOption {
 		chain.diffLayerFreezerBlockLimit = limit
 		return chain
 	}
+}
+
+func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Hash, diffHash common.Hash) (*trust.RootResponsePacket, error) {
+	// TODO:
+}
+
+func (bc *BlockChain) GetRootByDiffLayer(diffLayer *types.DiffLayer) (*trust.RootResponsePacket, error) {
+	// TODO:
 }
