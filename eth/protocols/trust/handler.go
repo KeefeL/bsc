@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -124,19 +126,79 @@ type Decoder interface {
 }
 
 func handleGetRootByDiffHash(backend Backend, msg Decoder, peer *Peer) error {
-	res := new(GetRootByDiffHashPacket)
-	if err := msg.Decode(res); err != nil {
+	req := new(GetRootByDiffHashPacket)
+	if err := msg.Decode(req); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	return backend.Handle(peer, res)
+
+	res, err := backend.Chain().GetRootByDiffHash(req.BlockNumber, req.BlockHash, req.DiffHash)
+	if err != nil {
+		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
+			RequestId:   req.RequestId,
+			Status:      *StatusUnexpectedError,
+			BlockNumber: req.BlockNumber,
+			BlockHash:   req.BlockHash,
+			Root:        common.Hash{},
+			Extra:       defaultExtra,
+		})
+
+		return err
+	}
+
+	// Just handle request id here
+	res.RequestId = req.RequestId
+	p2p.Send(peer.rw, RootResponseMsg, res)
+
+	return nil
 }
 
 func handleGetRootByDiffLayer(backend Backend, msg Decoder, peer *Peer) error {
-	res := new(GetRootByDiffLayerPacket)
-	if err := msg.Decode(res); err != nil {
+	req := new(GetRootByDiffLayerPacket)
+	if err := msg.Decode(req); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	return backend.Handle(peer, res)
+
+	diffLayer, err := req.Unpack()
+	if err != nil {
+		return err
+	}
+
+	res, err := backend.Chain().GetRootByDiffHash(diffLayer.Number, diffLayer.BlockHash, diffLayer.DiffHash)
+	if err != nil {
+		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
+			RequestId:   req.RequestId,
+			Status:      *StatusUnexpectedError,
+			BlockNumber: diffLayer.Number,
+			BlockHash:   diffLayer.BlockHash,
+			Root:        common.Hash{},
+			Extra:       defaultExtra,
+		})
+
+		return err
+	}
+
+	if res.Status.Code != StatusPartialVerified.Code {
+		res.RequestId = req.RequestId
+		p2p.Send(peer.rw, RootResponseMsg, res)
+	}
+
+	res, err = backend.Chain().GetRootByDiffLayer(diffLayer)
+	if err != nil {
+		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
+			RequestId:   req.RequestId,
+			Status:      *StatusUnexpectedError,
+			BlockNumber: diffLayer.Number,
+			BlockHash:   diffLayer.BlockHash,
+			Root:        common.Hash{},
+			Extra:       defaultExtra,
+		})
+
+		return err
+	}
+
+	res.RequestId = req.RequestId
+	p2p.Send(peer.rw, RootResponseMsg, res)
+	return nil
 }
 
 func handleRootResponse(backend Backend, msg Decoder, peer *Peer) error {

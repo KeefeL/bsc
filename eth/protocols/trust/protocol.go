@@ -98,7 +98,7 @@ type RootResponsePacket struct {
 	BlockNumber uint64
 	BlockHash   common.Hash
 	Root        common.Hash
-	Etra        rlp.RawValue // for extension
+	Extra       rlp.RawValue // for extension
 }
 
 func (p *GetRootByDiffLayerPacket) Unpack() (*types.DiffLayer, error) {
