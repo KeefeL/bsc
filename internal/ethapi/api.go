@@ -25,6 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/eth/protocols/trust"
+
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -1285,6 +1287,14 @@ func (s *PublicBlockChainAPI) GetDiffAccountsWithScope(ctx context.Context, bloc
 
 	result, _, err := s.replay(ctx, block, accounts)
 	return result, err
+}
+
+func (s *PublicBlockChainAPI) GetRootByDiffHash(ctx context.Context, blockNr rpc.BlockNumber, blockHash common.Hash, diffHash common.Hash) (*trust.RootResponsePacket, error) {
+	return s.b.Chain().GetRootByDiffHash(uint64(blockNr), blockHash, diffHash)
+}
+
+func (s *PublicBlockChainAPI) GetRootByDiffLayer(ctx context.Context, diffLayer *types.DiffLayer) (*trust.RootResponsePacket, error) {
+	return s.b.Chain().GetRootByDiffLayer(diffLayer)
 }
 
 // ExecutionResult groups all structured logs emitted by the EVM
