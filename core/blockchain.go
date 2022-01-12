@@ -1682,6 +1682,12 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		diffLayer.Receipts = receipts
 		diffLayer.BlockHash = block.Hash()
 		diffLayer.Number = block.NumberU64()
+
+		sort.Sort(types.DiffCodeSlice(diffLayer.Codes))
+		sort.Sort(common.AddressSlice(diffLayer.Destructs))
+		sort.Sort(types.DiffAccountSlice(diffLayer.Accounts))
+		sort.Sort(types.DiffStorageSlice(diffLayer.Storages))
+
 		bc.cacheDiffLayer(diffLayer)
 	}
 	triedb := bc.stateCache.TrieDB()
