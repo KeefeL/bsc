@@ -426,6 +426,41 @@ func (d *DiffLayer) EncodeRLP(w io.Writer) error {
 	})
 }
 
+// trustDiffLayer is used to trust protocol
+type trustDiffLayer struct {
+	BlockHash common.Hash
+	Number    uint64
+	Codes     []DiffCode
+	Destructs []common.Address
+	Accounts  []DiffAccount
+	Storages  []DiffStorage
+}
+
+// DecodeTrustRLP decodes the encoded trustDiffLayer
+func (d *DiffLayer) DecodeTrustRLP(s *rlp.Stream) error {
+	var td trustDiffLayer
+
+	if err := s.Decode(&td); err != nil {
+		return err
+	}
+
+	d.BlockHash, d.Number, d.Codes, d.Destructs, d.Accounts, d.Storages =
+		td.BlockHash, td.Number, td.Codes, td.Destructs, td.Accounts, td.Storages
+	return nil
+}
+
+// EncodeTrustRLP serializes trustDiffLayer into the RLP format.
+func (d *DiffLayer) EncodeTrustRLP(w io.Writer) error {
+	return rlp.Encode(w, trustDiffLayer{
+		BlockHash: d.BlockHash,
+		Number:    d.Number,
+		Codes:     d.Codes,
+		Destructs: d.Destructs,
+		Accounts:  d.Accounts,
+		Storages:  d.Storages,
+	})
+}
+
 func (d *DiffLayer) Validate() error {
 	if d.BlockHash == (common.Hash{}) {
 		return errors.New("blockHash can't be empty")
