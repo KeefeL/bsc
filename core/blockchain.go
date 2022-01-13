@@ -30,8 +30,6 @@ import (
 
 	"golang.org/x/crypto/sha3"
 
-	"github.com/ethereum/go-ethereum/eth/protocols/trust"
-
 	lru "github.com/hashicorp/golang-lru"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -3022,23 +3020,25 @@ func EnablePersistDiff(limit uint64) BlockChainOption {
 	}
 }
 
-func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Hash, diffHash common.Hash) (*trust.RootResponsePacket, error) {
-	var (
-		res trust.RootResponsePacket
-	)
+func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Hash, diffHash common.Hash) (*types.VerifyResult, error) {
+	var res types.VerifyResult
+	res.BlockNumber = blockNumber
+	res.BlockHash = blockHash
 
 	if cached, ok := bc.diffLayerCache.Get(blockHash); ok {
 		diff := cached.(*types.DiffLayer)
 		if diff.DiffHash == (common.Hash{}) {
-			trustDiff, err := diff.EncodeTrustRLP()
+			trustDiff, err := diff.GetVerificationRLP()
 			if err != nil {
-				return nil, err
+				res.Status = types.StatusUnexpectedError
+				return &res, err
 			}
 
 			hasher := sha3.NewLegacyKeccak256()
 			_, err = hasher.Write(trustDiff)
 			if err != nil {
-				return nil, err
+				res.Status = types.StatusUnexpectedError
+				return &res, err
 			}
 
 			var hash common.Hash
@@ -3047,32 +3047,25 @@ func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Has
 		}
 
 		if diffHash != diff.DiffHash {
-			res.BlockNumber = blockNumber
-			res.BlockHash = blockHash
-			res.Status = trust.StatusDiffHashMismatch
+			res.Status = types.StatusDiffHashMismatch
 			return &res, nil
 		}
 
 		header := bc.GetHeaderByHash(blockHash)
 		if header == nil {
-			return nil, fmt.Errorf("unexpected error, header not found")
+			res.Status = types.StatusUnexpectedError
+			return &res, fmt.Errorf("unexpected error, header not found")
 		}
+		res.Status = types.StatusFullVerified
 		res.Root = header.Root
-		res.BlockNumber = header.Number.Uint64()
-		res.BlockHash = blockHash
-		res.Status = trust.StatusFullVerified
 		return &res, nil
 	}
 
 	if blockNumber > bc.CurrentHeader().Number.Uint64()+11 {
-		res.BlockNumber = blockNumber
-		res.BlockHash = blockHash
-		res.Status = trust.StatusBlockTooNew
+		res.Status = types.StatusBlockTooNew
 		return &res, nil
 	} else if blockNumber > bc.CurrentHeader().Number.Uint64() {
-		res.BlockNumber = blockNumber
-		res.BlockHash = blockHash
-		res.Status = trust.StatusBlockNewer
+		res.Status = types.StatusBlockNewer
 		return &res, nil
 	}
 
@@ -3081,15 +3074,17 @@ func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Has
 		diff := rawdb.ReadDiffLayer(diffStore, blockHash)
 		if diff != nil {
 			if diff.DiffHash == (common.Hash{}) {
-				trustDiff, err := diff.EncodeTrustRLP()
+				trustDiff, err := diff.GetVerificationRLP()
 				if err != nil {
-					return nil, err
+					res.Status = types.StatusUnexpectedError
+					return &res, err
 				}
 
 				hasher := sha3.NewLegacyKeccak256()
 				_, err = hasher.Write(trustDiff)
 				if err != nil {
-					return nil, err
+					res.Status = types.StatusUnexpectedError
+					return &res, err
 				}
 
 				var hash common.Hash
@@ -3098,20 +3093,17 @@ func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Has
 			}
 
 			if diffHash != diff.DiffHash {
-				res.BlockNumber = blockNumber
-				res.BlockHash = blockHash
-				res.Status = trust.StatusDiffHashMismatch
+				res.Status = types.StatusDiffHashMismatch
 				return &res, nil
 			}
 
 			header := bc.GetHeaderByHash(blockHash)
 			if header == nil {
-				return nil, fmt.Errorf("unexpected error, header not found")
+				res.Status = types.StatusUnexpectedError
+				return &res, fmt.Errorf("unexpected error, header not found")
 			}
+			res.Status = types.StatusFullVerified
 			res.Root = header.Root
-			res.BlockNumber = header.Number.Uint64()
-			res.BlockHash = blockHash
-			res.Status = trust.StatusFullVerified
 			return &res, nil
 		}
 	}
@@ -3119,21 +3111,15 @@ func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Has
 	header := bc.GetHeaderByHash(blockHash)
 	if header == nil {
 		if blockNumber > bc.CurrentHeader().Number.Uint64()-11 {
-			res.BlockNumber = blockNumber
-			res.BlockHash = blockHash
-			res.Status = trust.StatusPossibleFork
+			res.Status = types.StatusPossibleFork
 			return &res, nil
 		}
 
-		res.BlockNumber = blockNumber
-		res.BlockHash = blockHash
-		res.Status = trust.StatusImpossibleFork
+		res.Status = types.StatusImpossibleFork
 		return &res, nil
 	}
 
+	res.Status = types.StatusUntrustedVerified
 	res.Root = header.Root
-	res.BlockNumber = header.Number.Uint64()
-	res.BlockHash = blockHash
-	res.Status = trust.StatusUntrustedVerified
 	return &res, nil
 }

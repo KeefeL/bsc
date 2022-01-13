@@ -36,7 +36,8 @@ func (h *trustHandler) PeerInfo(id enode.ID) interface{} {
 func (h *trustHandler) Handle(peer *trust.Peer, packet trust.Packet) error {
 	switch packet := packet.(type) {
 	case *trust.RootResponsePacket:
-		// TODO: h.verifyManager.HandleRootResponse(peer.ID(), *packet)
+		// TODO: h.bc.VerifyManager().HandleRootResponse(peer.ID(), *packet)
+		return nil
 
 	default:
 		return fmt.Errorf("unexpected trust packet type: %T", packet)
