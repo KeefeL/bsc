@@ -437,10 +437,10 @@ type trustDiffLayer struct {
 }
 
 // DecodeTrustRLP decodes the encoded trustDiffLayer
-func (d *DiffLayer) DecodeTrustRLP(s *rlp.Stream) error {
+func (d *DiffLayer) DecodeTrustRLP(s rlp.RawValue) error {
 	var td trustDiffLayer
 
-	if err := s.Decode(&td); err != nil {
+	if err := rlp.DecodeBytes(s, &td); err != nil {
 		return err
 	}
 
@@ -450,8 +450,8 @@ func (d *DiffLayer) DecodeTrustRLP(s *rlp.Stream) error {
 }
 
 // EncodeTrustRLP serializes trustDiffLayer into the RLP format.
-func (d *DiffLayer) EncodeTrustRLP(w io.Writer) error {
-	return rlp.Encode(w, trustDiffLayer{
+func (d *DiffLayer) EncodeTrustRLP() (rlp.RawValue, error) {
+	return rlp.EncodeToBytes(trustDiffLayer{
 		BlockHash: d.BlockHash,
 		Number:    d.Number,
 		Codes:     d.Codes,

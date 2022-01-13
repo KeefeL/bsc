@@ -28,6 +28,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/crypto/sha3"
+
 	"github.com/ethereum/go-ethereum/eth/protocols/trust"
 
 	lru "github.com/hashicorp/golang-lru"
@@ -3021,9 +3023,133 @@ func EnablePersistDiff(limit uint64) BlockChainOption {
 }
 
 func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Hash, diffHash common.Hash) (*trust.RootResponsePacket, error) {
-	// TODO:
+	var (
+		res trust.RootResponsePacket
+	)
+
+	if cached, ok := bc.diffLayerCache.Get(blockHash); ok {
+		diff := cached.(*types.DiffLayer)
+		if diff.DiffHash == (common.Hash{}) {
+			trustDiff, err := diff.EncodeTrustRLP()
+			if err != nil {
+				return nil, err
+			}
+
+			hasher := sha3.NewLegacyKeccak256()
+			_, err = hasher.Write(trustDiff)
+			if err != nil {
+				return nil, err
+			}
+
+			var hash common.Hash
+			hasher.Sum(hash[:0])
+			diff.DiffHash = hash
+		}
+
+		if diffHash != diff.DiffHash {
+			res.BlockNumber = blockNumber
+			res.BlockHash = blockHash
+			res.Status = trust.StatusDiffHashMismatch
+			return &res, nil
+		}
+
+		header := bc.GetHeaderByHash(blockHash)
+		if header == nil {
+			return nil, fmt.Errorf("unexpected error, header not found")
+		}
+		res.Root = header.Root
+		res.BlockNumber = header.Number.Uint64()
+		res.BlockHash = blockHash
+		res.Status = trust.StatusFullVerified
+		return &res, nil
+	}
+
+	if blockNumber > bc.CurrentHeader().Number.Uint64()+11 {
+		res.BlockNumber = blockNumber
+		res.BlockHash = blockHash
+		res.Status = trust.StatusBlockTooNew
+		return &res, nil
+	} else if blockNumber > bc.CurrentHeader().Number.Uint64() {
+		res.BlockNumber = blockNumber
+		res.BlockHash = blockHash
+		res.Status = trust.StatusBlockNewer
+		return &res, nil
+	}
+
+	diffStore := bc.db.DiffStore()
+	if diffStore != nil {
+		diff := rawdb.ReadDiffLayer(diffStore, blockHash)
+		if diff != nil {
+			if diff.DiffHash == (common.Hash{}) {
+				trustDiff, err := diff.EncodeTrustRLP()
+				if err != nil {
+					return nil, err
+				}
+
+				hasher := sha3.NewLegacyKeccak256()
+				_, err = hasher.Write(trustDiff)
+				if err != nil {
+					return nil, err
+				}
+
+				var hash common.Hash
+				hasher.Sum(hash[:0])
+				diff.DiffHash = hash
+			}
+
+			if diffHash != diff.DiffHash {
+				res.BlockNumber = blockNumber
+				res.BlockHash = blockHash
+				res.Status = trust.StatusDiffHashMismatch
+				return &res, nil
+			}
+
+			header := bc.GetHeaderByHash(blockHash)
+			if header == nil {
+				return nil, fmt.Errorf("unexpected error, header not found")
+			}
+			res.Root = header.Root
+			res.BlockNumber = header.Number.Uint64()
+			res.BlockHash = blockHash
+			res.Status = trust.StatusFullVerified
+			return &res, nil
+		}
+	}
+
+	header := bc.GetHeaderByHash(blockHash)
+	if header == nil {
+		if blockNumber > bc.CurrentHeader().Number.Uint64()-11 {
+			res.BlockNumber = blockNumber
+			res.BlockHash = blockHash
+			res.Status = trust.StatusPossibleFork
+			return &res, nil
+		}
+
+		res.BlockNumber = blockNumber
+		res.BlockHash = blockHash
+		res.Status = trust.StatusImpossibleFork
+		return &res, nil
+	}
+
+	pHeader := bc.GetHeaderByHash(header.ParentHash)
+	if pHeader == nil {
+		return nil, fmt.Errorf("unexpected error: parent not found")
+	}
+	if _, err := bc.stateCache.OpenTrie(pHeader.Root); err == nil {
+		res.Root = header.Root
+		res.BlockNumber = header.Number.Uint64()
+		res.BlockHash = blockHash
+		res.Status = trust.StatusPartialVerified
+		return &res, nil
+	}
+
+	res.Root = header.Root
+	res.BlockNumber = header.Number.Uint64()
+	res.BlockHash = blockHash
+	res.Status = trust.StatusUntrustedVerified
+	return &res, nil
 }
 
 func (bc *BlockChain) GetRootByDiffLayer(diffLayer *types.DiffLayer) (*trust.RootResponsePacket, error) {
-	// TODO:
+
 }

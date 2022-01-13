@@ -53,25 +53,25 @@ type RootResponseStatus struct {
 
 var (
 	// StatusVerified means the processing of request going as expected and found the root correctly.
-	StatusVerified          = &RootResponseStatus{Code: 0x100}
-	StatusFullVerified      = &RootResponseStatus{Code: 0x101, Msg: "state root full verified"}
-	StatusPartialVerified   = &RootResponseStatus{Code: 0x102, Msg: "state root partial verified, need difflayer to be full verified"}
-	StatusUntrustedVerified = &RootResponseStatus{Code: 0x103, Msg: "state root untrusted verified, because of missing MPT data in verify node"}
+	StatusVerified          = RootResponseStatus{Code: 0x100}
+	StatusFullVerified      = RootResponseStatus{Code: 0x101, Msg: "state root full verified"}
+	StatusPartialVerified   = RootResponseStatus{Code: 0x102, Msg: "state root partial verified, need difflayer to be full verified"}
+	StatusUntrustedVerified = RootResponseStatus{Code: 0x103, Msg: "state root untrusted verified, because of missing MPT data in verify node"}
 
 	// StatusFailed means the request has something wrong.
-	StatusFailed           = &RootResponseStatus{Code: 0x200}
-	StatusDiffHashMismatch = &RootResponseStatus{Code: 0x201, Msg: "verify failed because of blockhash mismatch with diffhash"}
-	StatusImpossibleFork   = &RootResponseStatus{Code: 0x202, Msg: "verify failed because of impossible fork detected"}
+	StatusFailed           = RootResponseStatus{Code: 0x200}
+	StatusDiffHashMismatch = RootResponseStatus{Code: 0x201, Msg: "verify failed because of blockhash mismatch with diffhash"}
+	StatusImpossibleFork   = RootResponseStatus{Code: 0x202, Msg: "verify failed because of impossible fork detected"}
 
 	// StatusUncertain means verify node can't give a certain result of the request.
-	StatusUncertain      = &RootResponseStatus{Code: 0x300}
-	StatusBlockTooNew    = &RootResponseStatus{Code: 0x301, Msg: "can’t verify because of block number larger than current height more than 11"}
-	StatusBlockNewer     = &RootResponseStatus{Code: 0x302, Msg: "can’t verify because of block number larger than current height"}
-	StatusPossibleFork   = &RootResponseStatus{Code: 0x303, Msg: "can’t verify because of possible fork detected"}
-	StatusRequestTooBusy = &RootResponseStatus{Code: 0x304, Msg: "can’t verify because of request too busy"}
+	StatusUncertain      = RootResponseStatus{Code: 0x300}
+	StatusBlockTooNew    = RootResponseStatus{Code: 0x301, Msg: "can’t verify because of block number larger than current height more than 11"}
+	StatusBlockNewer     = RootResponseStatus{Code: 0x302, Msg: "can’t verify because of block number larger than current height"}
+	StatusPossibleFork   = RootResponseStatus{Code: 0x303, Msg: "can’t verify because of possible fork detected"}
+	StatusRequestTooBusy = RootResponseStatus{Code: 0x304, Msg: "can’t verify because of request too busy"}
 
 	// StatusUnexpectedError is unexpected internal error.
-	StatusUnexpectedError = &RootResponseStatus{Code: 0x400, Msg: "can’t verify because of unexpected internal error"}
+	StatusUnexpectedError = RootResponseStatus{Code: 0x400, Msg: "can’t verify because of unexpected internal error"}
 )
 
 // Packet represents a p2p message in the `trust` protocol.
