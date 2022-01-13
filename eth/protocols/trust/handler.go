@@ -135,7 +135,7 @@ func handleGetRootByDiffHash(backend Backend, msg Decoder, peer *Peer) error {
 	if err != nil {
 		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
 			RequestId:   req.RequestId,
-			Status:      *StatusUnexpectedError,
+			Status:      StatusUnexpectedError,
 			BlockNumber: req.BlockNumber,
 			BlockHash:   req.BlockHash,
 			Root:        common.Hash{},
@@ -167,7 +167,7 @@ func handleGetRootByDiffLayer(backend Backend, msg Decoder, peer *Peer) error {
 	if err != nil {
 		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
 			RequestId:   req.RequestId,
-			Status:      *StatusUnexpectedError,
+			Status:      StatusUnexpectedError,
 			BlockNumber: diffLayer.Number,
 			BlockHash:   diffLayer.BlockHash,
 			Root:        common.Hash{},
@@ -186,7 +186,7 @@ func handleGetRootByDiffLayer(backend Backend, msg Decoder, peer *Peer) error {
 	if err != nil {
 		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
 			RequestId:   req.RequestId,
-			Status:      *StatusUnexpectedError,
+			Status:      StatusUnexpectedError,
 			BlockNumber: diffLayer.Number,
 			BlockHash:   diffLayer.BlockHash,
 			Root:        common.Hash{},
