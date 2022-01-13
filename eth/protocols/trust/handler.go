@@ -106,10 +106,10 @@ func handleMessage(backend Backend, peer *Peer) error {
 	}
 	// Handle the message depending on its contents
 	switch {
-	case msg.Code == GetRootByDiffHashMsg:
-		return handleGetRootByDiffHash(backend, msg, peer)
+	case msg.Code == RequestRootMsg:
+		return handleRootRequest(backend, msg, peer)
 
-	case msg.Code == RootResponseMsg:
+	case msg.Code == RespondRootMsg:
 		return handleRootResponse(backend, msg, peer)
 
 	default:
@@ -122,15 +122,15 @@ type Decoder interface {
 	Time() time.Time
 }
 
-func handleGetRootByDiffHash(backend Backend, msg Decoder, peer *Peer) error {
-	req := new(GetRootByDiffHashPacket)
+func handleRootRequest(backend Backend, msg Decoder, peer *Peer) error {
+	req := new(RootRequestPacket)
 	if err := msg.Decode(req); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
 	res, err := backend.Chain().GetRootByDiffHash(req.BlockNumber, req.BlockHash, req.DiffHash)
 	if err != nil {
-		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
+		p2p.Send(peer.rw, RespondRootMsg, &RootResponsePacket{
 			RequestId:   req.RequestId,
 			Status:      StatusUnexpectedError,
 			BlockNumber: req.BlockNumber,
@@ -144,7 +144,7 @@ func handleGetRootByDiffHash(backend Backend, msg Decoder, peer *Peer) error {
 
 	// Just handle request id here
 	res.RequestId = req.RequestId
-	p2p.Send(peer.rw, RootResponseMsg, res)
+	p2p.Send(peer.rw, RespondRootMsg, res)
 
 	return nil
 }
@@ -155,7 +155,7 @@ func handleRootResponse(backend Backend, msg Decoder, peer *Peer) error {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
-	requestTracker.Fulfil(peer.id, peer.version, RootResponseMsg, res.RequestId)
+	requestTracker.Fulfil(peer.id, peer.version, RespondRootMsg, res.RequestId)
 	return backend.Handle(peer, res)
 }
 

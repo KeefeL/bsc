@@ -6,7 +6,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Peer is a collection of relevant information we have about a `trust` peer.
@@ -57,24 +56,14 @@ func (p *Peer) Close() {
 	close(p.term)
 }
 
-func (p *Peer) GetRootByDiffHash(blockNumber uint64, blockHash common.Hash, diffHash common.Hash) error {
+func (p *Peer) RequestRoot(blockNumber uint64, blockHash common.Hash, diffHash common.Hash) error {
 	id := rand.Uint64()
 
-	requestTracker.Track(p.id, p.version, GetRootByDiffHashMsg, RootResponseMsg, id)
-	return p2p.Send(p.rw, GetRootByDiffHashMsg, GetRootByDiffHashPacket{
+	requestTracker.Track(p.id, p.version, RequestRootMsg, RespondRootMsg, id)
+	return p2p.Send(p.rw, RequestRootMsg, RootRequestPacket{
 		RequestId:   id,
 		BlockNumber: blockNumber,
 		BlockHash:   blockHash,
 		DiffHash:    diffHash,
-	})
-}
-
-func (p *Peer) GetRootByDiffLayer(diffLayer rlp.RawValue) error {
-	id := rand.Uint64()
-
-	requestTracker.Track(p.id, p.version, GetRootByDiffLayerMsg, RootResponseMsg, id)
-	return p2p.Send(p.rw, GetRootByDiffLayerMsg, GetRootByDiffLayerPacket{
-		RequestId: id,
-		DiffLayer: diffLayer,
 	})
 }
