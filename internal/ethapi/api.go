@@ -1293,10 +1293,6 @@ func (s *PublicBlockChainAPI) GetRootByDiffHash(ctx context.Context, blockNr rpc
 	return s.b.Chain().GetRootByDiffHash(uint64(blockNr), blockHash, diffHash)
 }
 
-func (s *PublicBlockChainAPI) GetRootByDiffLayer(ctx context.Context, diffLayer *types.DiffLayer) (*trust.RootResponsePacket, error) {
-	return s.b.Chain().GetRootByDiffLayer(diffLayer)
-}
-
 // ExecutionResult groups all structured logs emitted by the EVM
 // while replaying a transaction in debug mode as well as transaction
 // execution status, the amount of gas used and the return value
