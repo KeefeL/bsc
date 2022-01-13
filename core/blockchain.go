@@ -3131,25 +3131,9 @@ func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Has
 		return &res, nil
 	}
 
-	pHeader := bc.GetHeaderByHash(header.ParentHash)
-	if pHeader == nil {
-		return nil, fmt.Errorf("unexpected error: parent not found")
-	}
-	if _, err := bc.stateCache.OpenTrie(pHeader.Root); err == nil {
-		res.Root = header.Root
-		res.BlockNumber = header.Number.Uint64()
-		res.BlockHash = blockHash
-		res.Status = trust.StatusPartialVerified
-		return &res, nil
-	}
-
 	res.Root = header.Root
 	res.BlockNumber = header.Number.Uint64()
 	res.BlockHash = blockHash
 	res.Status = trust.StatusUntrustedVerified
 	return &res, nil
-}
-
-func (bc *BlockChain) GetRootByDiffLayer(diffLayer *types.DiffLayer) (*trust.RootResponsePacket, error) {
-
 }

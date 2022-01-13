@@ -109,9 +109,6 @@ func handleMessage(backend Backend, peer *Peer) error {
 	case msg.Code == GetRootByDiffHashMsg:
 		return handleGetRootByDiffHash(backend, msg, peer)
 
-	case msg.Code == GetRootByDiffLayerMsg:
-		return handleGetRootByDiffLayer(backend, msg, peer)
-
 	case msg.Code == RootResponseMsg:
 		return handleRootResponse(backend, msg, peer)
 
@@ -149,55 +146,6 @@ func handleGetRootByDiffHash(backend Backend, msg Decoder, peer *Peer) error {
 	res.RequestId = req.RequestId
 	p2p.Send(peer.rw, RootResponseMsg, res)
 
-	return nil
-}
-
-func handleGetRootByDiffLayer(backend Backend, msg Decoder, peer *Peer) error {
-	req := new(GetRootByDiffLayerPacket)
-	if err := msg.Decode(req); err != nil {
-		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
-	}
-
-	diffLayer, err := req.Unpack()
-	if err != nil {
-		return err
-	}
-
-	res, err := backend.Chain().GetRootByDiffHash(diffLayer.Number, diffLayer.BlockHash, diffLayer.DiffHash)
-	if err != nil {
-		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
-			RequestId:   req.RequestId,
-			Status:      StatusUnexpectedError,
-			BlockNumber: diffLayer.Number,
-			BlockHash:   diffLayer.BlockHash,
-			Root:        common.Hash{},
-			Extra:       defaultExtra,
-		})
-
-		return err
-	}
-
-	if res.Status.Code != StatusPartialVerified.Code {
-		res.RequestId = req.RequestId
-		p2p.Send(peer.rw, RootResponseMsg, res)
-	}
-
-	res, err = backend.Chain().GetRootByDiffLayer(diffLayer)
-	if err != nil {
-		p2p.Send(peer.rw, RootResponseMsg, &RootResponsePacket{
-			RequestId:   req.RequestId,
-			Status:      StatusUnexpectedError,
-			BlockNumber: diffLayer.Number,
-			BlockHash:   diffLayer.BlockHash,
-			Root:        common.Hash{},
-			Extra:       defaultExtra,
-		})
-
-		return err
-	}
-
-	res.RequestId = req.RequestId
-	p2p.Send(peer.rw, RootResponseMsg, res)
 	return nil
 }
 
