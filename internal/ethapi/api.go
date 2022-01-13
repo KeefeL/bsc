@@ -25,8 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/eth/protocols/trust"
-
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -1289,7 +1287,7 @@ func (s *PublicBlockChainAPI) GetDiffAccountsWithScope(ctx context.Context, bloc
 	return result, err
 }
 
-func (s *PublicBlockChainAPI) GetRootByDiffHash(ctx context.Context, blockNr rpc.BlockNumber, blockHash common.Hash, diffHash common.Hash) (*trust.RootResponsePacket, error) {
+func (s *PublicBlockChainAPI) GetRootByDiffHash(ctx context.Context, blockNr rpc.BlockNumber, blockHash common.Hash, diffHash common.Hash) (*types.VerifyResult, error) {
 	return s.b.Chain().GetRootByDiffHash(uint64(blockNr), blockHash, diffHash)
 }
 

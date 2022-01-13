@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -129,24 +127,16 @@ func handleRootRequest(backend Backend, msg Decoder, peer *Peer) error {
 	}
 
 	res, err := backend.Chain().GetRootByDiffHash(req.BlockNumber, req.BlockHash, req.DiffHash)
-	if err != nil {
-		p2p.Send(peer.rw, RespondRootMsg, &RootResponsePacket{
-			RequestId:   req.RequestId,
-			Status:      StatusUnexpectedError,
-			BlockNumber: req.BlockNumber,
-			BlockHash:   req.BlockHash,
-			Root:        common.Hash{},
-			Extra:       defaultExtra,
-		})
+	p2p.Send(peer.rw, RespondRootMsg, RootResponsePacket{
+		RequestId:   req.RequestId,
+		Status:      res.Status,
+		BlockNumber: req.BlockNumber,
+		BlockHash:   req.BlockHash,
+		Root:        res.Root,
+		Extra:       defaultExtra,
+	})
 
-		return err
-	}
-
-	// Just handle request id here
-	res.RequestId = req.RequestId
-	p2p.Send(peer.rw, RespondRootMsg, res)
-
-	return nil
+	return err
 }
 
 func handleRootResponse(backend Backend, msg Decoder, peer *Peer) error {
