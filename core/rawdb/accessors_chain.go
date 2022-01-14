@@ -64,6 +64,26 @@ func DeleteCanonicalHash(db ethdb.KeyValueWriter, number uint64) {
 	}
 }
 
+func ReadTrustBlockHash(db ethdb.Reader, hash common.Hash) bool {
+	data, _ := db.Get(trustBlockHashKey(hash))
+	if len(data) == 0 {
+		return false
+	}
+	return bytes.Equal(data,[]byte{0x01})
+}
+
+func WriteTrustBlockHash(db ethdb.KeyValueWriter, hashkey common.Hash) {
+	if err := db.Put(trustBlockHashKey(hashkey),[]byte{0x01}); err != nil {
+		log.Crit("Failed to store trust block hash")
+	}
+}
+
+func DeleteTrustBlockHash(db ethdb.KeyValueWriter, hash common.Hash) {
+	if err := db.Delete(trustBlockHashKey(hash)); err != nil {
+		log.Crit("Failed to delete trust block hash")
+	}
+}
+
 // ReadAllHashes retrieves all the hashes assigned to blocks at a certain heights,
 // both canonical and reorged forks included.
 func ReadAllHashes(db ethdb.Iteratee, number uint64) []common.Hash {

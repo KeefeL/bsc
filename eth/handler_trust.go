@@ -2,7 +2,6 @@ package eth
 
 import (
 	"fmt"
-
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/eth/protocols/trust"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -34,6 +33,13 @@ func (h *trustHandler) PeerInfo(id enode.ID) interface{} {
 func (h *trustHandler) Handle(peer *trust.Peer, packet trust.Packet) error {
 	switch packet := packet.(type) {
 	case *trust.RootResponsePacket:
+		verifyResult := &core.VerifyResult{
+			Status:      packet.Status,
+			BlockNumber: packet.BlockNumber,
+			BlockHash:   packet.BlockHash,
+			Root:        packet.Root,
+		}
+		h.Chain().VerifyManger().HandleRootResponse(verifyResult, peer.ID())
 		// TODO: h.bc.VerifyManager().HandleRootResponse(peer.ID(), *packet)
 		return nil
 

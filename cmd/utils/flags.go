@@ -121,6 +121,14 @@ var (
 		Name:  "disablesnapprotocol",
 		Usage: "Disable snap protocol",
 	}
+	DisableDiffProtocolFlag = cli.BoolFlag{
+		Name: "disablediffprotocol",
+		Usage: "Disable diff protocol",
+	}
+	EnableTrustProtocolFlag = cli.BoolFlag{
+		Name: "enabletrustprotocol",
+		Usage: "Enable trust protocol",
+	}
 	DiffSyncFlag = cli.BoolFlag{
 		Name: "diffsync",
 		Usage: "Enable diffy sync, Please note that enable diffsync will improve the syncing speed, " +
@@ -259,9 +267,11 @@ var (
 		Usage: "The layer of tries trees that keep in memory",
 		Value: 128,
 	}
-	AllowInsecureNoTriesFlag = cli.BoolTFlag{
-		Name:  "allow-insecure-no-tries",
-		Usage: `Disable the tries state root verification, the state consistency is no longer 100% guaranteed, diffsync is not allowed if enabled. Do not enable it unless you know exactly what the consequence it will cause.`,
+	defaultVerifyMode = ethconfig.Defaults.TriesVerifyMode
+	TriesVerifyModeFlag = TextMarshalerFlag{
+		Name: "tries-verify-mode",
+		Usage: `tries verify mode: "local", "full", "light", "insecure"`,
+		Value: &defaultVerifyMode,
 	}
 	OverrideBerlinFlag = cli.Uint64Flag{
 		Name:  "override.berlin",
@@ -1622,6 +1632,12 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	if ctx.GlobalIsSet(DisableSnapProtocolFlag.Name) {
 		cfg.DisableSnapProtocol = ctx.GlobalBool(DisableSnapProtocolFlag.Name)
 	}
+	if ctx.GlobalIsSet(DisableDiffProtocolFlag.Name) {
+		cfg.DisableDiffProtocol = ctx.GlobalIsSet(DisableDiffProtocolFlag.Name)
+	}
+	if ctx.GlobalIsSet(EnableTrustProtocolFlag.Name) {
+		cfg.EnableTrustProtocol = ctx.GlobalIsSet(EnableTrustProtocolFlag.Name)
+	}
 	if ctx.GlobalIsSet(DiffSyncFlag.Name) {
 		cfg.DiffSync = ctx.GlobalBool(DiffSyncFlag.Name)
 	}
@@ -1652,8 +1668,18 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	if ctx.GlobalIsSet(TriesInMemoryFlag.Name) {
 		cfg.TriesInMemory = ctx.GlobalUint64(TriesInMemoryFlag.Name)
 	}
-	if ctx.GlobalIsSet(AllowInsecureNoTriesFlag.Name) {
-		cfg.NoTries = ctx.GlobalBool(AllowInsecureNoTriesFlag.Name)
+	if ctx.GlobalIsSet(TriesVerifyModeFlag.Name) {
+		cfg.TriesVerifyMode = *GlobalTextMarshaler(ctx, TriesVerifyModeFlag.Name).(*core.VerifyMode)
+		//If a node sets verify mode to full or light, it's a fast node and need
+		//to verify blocks from verify nodes, then it should enable trust protocol.
+		if cfg.TriesVerifyMode == core.FullVerify || cfg.TriesVerifyMode == core.LightVerify {
+			cfg.EnableTrustProtocol = true
+		}
+		//If a node sets verify node but not local, it's a fast node whose difflayer is not integral.
+		//So fast node should disable diff protocol.
+		if cfg.TriesVerifyMode != core.LocalVerify {
+			cfg.DisableDiffProtocol = true
+		}
 	}
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheSnapshotFlag.Name) {
 		cfg.SnapshotCache = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheSnapshotFlag.Name) / 100
