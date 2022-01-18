@@ -15,18 +15,16 @@ type trustHandler handler
 func (h *trustHandler) Chain() *core.BlockChain { return h.chain }
 
 // RunPeer is invoked when a peer joins on the `snap` protocol.
-func (h *trustHandler) RunPeer(peer *trust.Peer, handler trust.Handler) error {
-	h.peerWG.Add(1)
-	defer h.peerWG.Done()
-
-	return handler(peer)
+func (h *trustHandler) RunPeer(peer *trust.Peer, hand trust.Handler) error {
+	return (*handler)(h).runTrustExtension(peer, hand)
 }
 
 // PeerInfo retrieves all known `trust` information about a peer.
 func (h *trustHandler) PeerInfo(id enode.ID) interface{} {
 	if p := h.peers.peer(id.String()); p != nil {
-		// FIXME: What to return here?
-		return p.Info()
+		if p.trustExt != nil {
+			return p.trustExt.info()
+		}
 	}
 	return nil
 }
