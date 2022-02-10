@@ -39,9 +39,11 @@ func (h *trustHandler) Handle(peer *trust.Peer, packet trust.Packet) error {
 			BlockHash:   packet.BlockHash,
 			Root:        packet.Root,
 		}
-		h.Chain().VerifyManger().HandleRootResponse(verifyResult, peer.ID())
-		// TODO: h.bc.VerifyManager().HandleRootResponse(peer.ID(), *packet)
-		return nil
+		if vm := h.Chain().Validator().RemoteVerifyManager(); vm != nil {
+			vm.HandleRootResponse(verifyResult, peer.ID())
+			return nil
+		}
+		return fmt.Errorf("verify manager is nil which is unexpected")
 
 	default:
 		return fmt.Errorf("unexpected trust packet type: %T", packet)

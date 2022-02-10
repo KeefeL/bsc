@@ -239,7 +239,6 @@ type BlockChain struct {
 	engine    consensus.Engine
 	validator Validator // Block and state validator interface
 	processor Processor // Block transaction processor interface
-	verifyManager *VerifyManager
 	vmConfig  vm.Config
 
 	shouldPreserve  func(*types.Block) bool        // Function used to determine whether should preserve the given block.
@@ -300,7 +299,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		diffNumToBlockHashes:  make(map[uint64]map[common.Hash]struct{}),
 		diffPeersToDiffHashes: make(map[string]map[common.Hash]struct{}),
 	}
-	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.processor = NewStateProcessor(chainConfig, bc, engine)
 
 	var err error
@@ -461,16 +459,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	go bc.untrustedDiffLayerPruneLoop()
 
 	return bc, nil
-}
-
-func (bc *BlockChain) StartVerify(peers VerifyPeers, allowUntrustedVerify bool) {
-	bc.verifyManager.peers = peers
-	bc.verifyManager.allowUntrustedVerify = allowUntrustedVerify
-	bc.verifyManager.Start()
-}
-
-func (bc *BlockChain) VerifyManger() *VerifyManager {
-	return bc.verifyManager
 }
 
 // GetVMConfig returns the block chain VM config.
@@ -1202,9 +1190,7 @@ func (bc *BlockChain) Stop() {
 	close(bc.quit)
 	bc.StopInsert()
 	bc.wg.Wait()
-	if bc.verifyManager != nil {
-		bc.verifyManager.Stop()
-	}
+	bc.validator.StopRemoteVerify()
 
 	// Ensure that the entirety of the state snapshot is journalled to disk.
 	var snapBase common.Hash
@@ -2023,11 +2009,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			log.Debug("Abort during block processing")
 			break
 		}
-		//For fast node, if the H-11 block has not been verified, stop processing blocks.
-		if bc.verifyManager != nil  && bc.verifyManager.CheckAncestorVerified(block.Header()) {
-			log.Debug("Block ancestor has not been verified", "hash", block.Hash(), "number", block.Number())
-			break
-		}
 		// If the header is a banned one, straight out abort
 		if BadHashes[block.Hash()] {
 			bc.reportBlock(block, nil, ErrBlacklistedHash)
@@ -2071,7 +2052,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			lastCanon = block
 			continue
 		}
-
 		// Retrieve the parent block and it's state to execute on top
 		start := time.Now()
 
@@ -2143,9 +2123,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		blockInsertTimer.UpdateSince(start)
 
 		//Start a routine to verify this block.
-		if bc.verifyManager != nil {
-			bc.verifyManager.NewBlockVerifyTask(block.Header())
-		}
+		bc.validator.VerifyBlock(block.Header())
 
 		switch status {
 		case CanonStatTy:
@@ -3045,10 +3023,10 @@ func EnablePersistDiff(limit uint64) BlockChainOption {
 	}
 }
 
-func EnableVerifyManager() BlockChainOption {
-	return func(chain *BlockChain) *BlockChain {
-		chain.verifyManager = NewVerifyManager(chain)
-		return chain
+func EnableBlockValidator(chainConfig *params.ChainConfig, engine consensus.Engine, mode *VerifyMode) BlockChainOption {
+	return func(bc *BlockChain) *BlockChain {
+		bc.validator = NewBlockValidator(chainConfig, bc, engine, mode)
+		return bc
 	}
 }
 
@@ -3109,7 +3087,7 @@ func (bc *BlockChain) GetRootByDiffHash(blockNumber uint64, blockHash common.Has
 }
 
 func (bc *BlockChain) GenerateDiffLayer(blockHash common.Hash) (*types.DiffLayer, error) {
-
+	return &types.DiffLayer{}, nil
 }
 
 func (bc *BlockChain) GetTrustedDiffLayer(blockHash common.Hash) *types.DiffLayer {

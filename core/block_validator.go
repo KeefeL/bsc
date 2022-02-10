@@ -34,16 +34,24 @@ type BlockValidator struct {
 	config *params.ChainConfig // Chain configuration options
 	bc     *BlockChain         // Canonical block chain
 	engine consensus.Engine    // Consensus engine used for validating
+	remoteValidator *VerifyManager
 }
 
 // NewBlockValidator returns a new block validator which is safe for re-use
-func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engine consensus.Engine) *BlockValidator {
+func NewBlockValidator(config *params.ChainConfig, blockchain *BlockChain, engine consensus.Engine, mode *VerifyMode) *BlockValidator {
 	validator := &BlockValidator{
 		config: config,
 		engine: engine,
 		bc:     blockchain,
 	}
+	if mode.NeedRemoteVerify() {
+		validator.remoteValidator = NewVerifyManager(blockchain, *mode == InsecureVerify)
+	}
 	return validator
+}
+
+func(v *BlockValidator) RemoteVerifyManager() *VerifyManager{
+	return v.remoteValidator
 }
 
 // ValidateBody validates the given block's uncles and verifies the block
@@ -147,6 +155,37 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 		}
 	}
 	return err
+}
+
+func (v *BlockValidator) StartRemoteVerify(peers VerifyPeers) {
+	v.remoteValidator.peers = peers
+	if v.remoteValidator != nil {
+		go v.remoteValidator.verifyManagerLoop()
+	}
+}
+
+func (v * BlockValidator) StopRemoteVerify() {
+	if v.remoteValidator != nil {
+		v.remoteValidator.Stop()
+	}
+}
+
+func (v * BlockValidator) VerifyBlock(header *types.Header) {
+	if v.remoteValidator != nil {
+		v.remoteValidator.newTaskCh <- header
+	}
+}
+
+// ValidateBlockVerify validate that weather the H-11 ancestor of the block has been verified by peers.
+// If not, the blockchain should halt.
+func (v * BlockValidator) ValidateBlockVerify(block *types.Block) error {
+	if v.remoteValidator != nil {
+		header := block.Header()
+		if !v.remoteValidator.AncestorVerified(v.bc.GetHeaderByNumber(header.Number.Uint64())) {
+			return fmt.Errorf("block's ancessor %x has not been verified", block.Hash())
+		}
+	}
+	return nil
 }
 
 // CalcGasLimit computes the gas limit of the next block after parent. It aims

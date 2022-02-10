@@ -211,9 +211,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.PersistDiff {
 		bcOps = append(bcOps, core.EnablePersistDiff(config.DiffBlock))
 	}
-	if config.TriesVerifyMode.NeedRemoteVerify() {
-		bcOps = append(bcOps, core.EnableVerifyManager())
-	}
+
+	bcOps = append(bcOps, core.EnableBlockValidator(chainConfig, eth.engine, &config.TriesVerifyMode))
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, bcOps...)
 	if err != nil {
 		return nil, err
@@ -255,9 +254,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	if config.TriesVerifyMode.NeedRemoteVerify() {
-		eth.blockchain.StartVerify(eth.handler.peers, config.TriesVerifyMode == core.LightVerify)
-	}
+	eth.blockchain.Validator().StartRemoteVerify(eth.handler.peers)
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))

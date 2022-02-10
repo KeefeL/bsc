@@ -270,7 +270,7 @@ var (
 	defaultVerifyMode = ethconfig.Defaults.TriesVerifyMode
 	TriesVerifyModeFlag = TextMarshalerFlag{
 		Name: "tries-verify-mode",
-		Usage: `tries verify mode: "local", "full", "light", "insecure"`,
+		Usage: `tries verify mode: "local", "full", "insecure", "none"`,
 		Value: &defaultVerifyMode,
 	}
 	OverrideBerlinFlag = cli.Uint64Flag{
@@ -1670,13 +1670,13 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	}
 	if ctx.GlobalIsSet(TriesVerifyModeFlag.Name) {
 		cfg.TriesVerifyMode = *GlobalTextMarshaler(ctx, TriesVerifyModeFlag.Name).(*core.VerifyMode)
-		//If a node sets verify mode to full or light, it's a fast node and need
-		//to verify blocks from verify nodes, then it should enable trust protocol.
-		if cfg.TriesVerifyMode == core.FullVerify || cfg.TriesVerifyMode == core.LightVerify {
+		// If a node sets verify mode to full or light, it's a fast node and need
+		// to verify blocks from verify nodes, then it should enable trust protocol.
+		if cfg.TriesVerifyMode.NeedRemoteVerify() {
 			cfg.EnableTrustProtocol = true
 		}
-		//If a node sets verify node but not local, it's a fast node whose difflayer is not integral.
-		//So fast node should disable diff protocol.
+		// If a node sets verify mode but not local, it's a fast node whose difflayer is not integral.
+		// So fast node should disable diff protocol.
 		if cfg.TriesVerifyMode != core.LocalVerify {
 			cfg.DisableDiffProtocol = true
 		}

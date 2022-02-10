@@ -94,7 +94,7 @@ var (
 	diffLayerPrefix = []byte("d") // diffLayerPrefix + hash  -> diffLayer
 
 	// trust block database
-	trustBlockPrefix = []byte("tb") // trustBlockPrefix + hash -> verify result
+	trustBlockPrefix = []byte("trust-block-") // trustBlockPrefix + hash -> verify result
 
 	preimagePrefix = []byte("secure-key-")      // preimagePrefix + hash -> preimage
 	configPrefix   = []byte("ethereum-config-") // config prefix for the db
@@ -121,6 +121,8 @@ const (
 
 	// freezerDifficultyTable indicates the name of the freezer total difficulty table.
 	freezerDifficultyTable = "diffs"
+	//
+	byteTrue = 0x01
 )
 
 // FreezerNoSnappy configures whether compression is disabled for the ancient-tables.

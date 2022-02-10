@@ -32,6 +32,17 @@ type Validator interface {
 	// ValidateState validates the given statedb and optionally the receipts and
 	// gas used.
 	ValidateState(block *types.Block, state *state.StateDB, receipts types.Receipts, usedGas uint64) error
+
+	// StartRemoteVerify start the remote verify routine for given peers.
+	StartRemoteVerify(peers VerifyPeers)
+	// StopRemoteVerify stop the remote verify routine.
+	StopRemoteVerify()
+	// VerifyBlock verify the given blcok.
+	VerifyBlock(header *types.Header)
+	// ValidateBlockVerify validate the given block has been verified.
+	ValidateBlockVerify(block *types.Block) error
+	// RemoteVerifyManager return remoteVerifyManager of validator.
+	RemoteVerifyManager() *VerifyManager
 }
 
 // Prefetcher is an interface for pre-caching transaction signatures and state.

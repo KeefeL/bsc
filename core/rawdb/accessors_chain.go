@@ -64,16 +64,16 @@ func DeleteCanonicalHash(db ethdb.KeyValueWriter, number uint64) {
 	}
 }
 
-func ReadTrustBlockHash(db ethdb.Reader, hash common.Hash) bool {
+func IsTrustBlock(db ethdb.Reader, hash common.Hash) bool {
 	data, _ := db.Get(trustBlockHashKey(hash))
 	if len(data) == 0 {
 		return false
 	}
-	return bytes.Equal(data,[]byte{0x01})
+	return bytes.Equal(data,[]byte{byteTrue})
 }
 
-func WriteTrustBlockHash(db ethdb.KeyValueWriter, hashkey common.Hash) {
-	if err := db.Put(trustBlockHashKey(hashkey),[]byte{0x01}); err != nil {
+func MarkTrustBlock(db ethdb.KeyValueWriter, hashkey common.Hash) {
+	if err := db.Put(trustBlockHashKey(hashkey),[]byte{byteTrue}); err != nil {
 		log.Crit("Failed to store trust block hash")
 	}
 }
