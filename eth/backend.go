@@ -208,11 +208,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.DiffSync && config.TriesVerifyMode == core.LocalVerify {
 		bcOps = append(bcOps, core.EnableLightProcessor)
 	}
+	peers := newPeerSet()
 	if config.PersistDiff {
 		bcOps = append(bcOps, core.EnablePersistDiff(config.DiffBlock))
 	}
 
-	bcOps = append(bcOps, core.EnableBlockValidator(chainConfig, eth.engine, &config.TriesVerifyMode))
+	bcOps = append(bcOps, core.EnableBlockValidator(chainConfig, eth.engine, config.TriesVerifyMode, peers))
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, bcOps...)
 	if err != nil {
 		return nil, err
@@ -250,11 +251,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		DirectBroadcast:        config.DirectBroadcast,
 		DiffSync:               config.DiffSync,
 		DisablePeerTxBroadcast: config.DisablePeerTxBroadcast,
+		PeerSet:                peers,
 	}); err != nil {
 		return nil, err
 	}
-
-	eth.blockchain.Validator().StartRemoteVerify(eth.handler.peers)
 
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))

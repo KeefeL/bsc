@@ -1675,11 +1675,6 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 		if cfg.TriesVerifyMode.NeedRemoteVerify() {
 			cfg.EnableTrustProtocol = true
 		}
-		// If a node sets verify mode but not local, it's a fast node whose difflayer is not integral.
-		// So fast node should disable diff protocol.
-		if cfg.TriesVerifyMode != core.LocalVerify {
-			cfg.DisableDiffProtocol = true
-		}
 	}
 	if ctx.GlobalIsSet(CacheFlag.Name) || ctx.GlobalIsSet(CacheSnapshotFlag.Name) {
 		cfg.SnapshotCache = ctx.GlobalInt(CacheFlag.Name) * ctx.GlobalInt(CacheSnapshotFlag.Name) / 100

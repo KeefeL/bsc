@@ -2,77 +2,88 @@ package core
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/event"
 	"math/rand"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
 const (
 	verifiedCacheSize = 256
 	maxForkHeight     = 11
-	resendInterval    = 2 * time.Second
+
 	// defaultPeerNumber is default number of verify peers
 	defaultPeerNumber = 3
+	// pruneHeightDiff indicates that if the height difference between current block and task's
+	// corresponding block is larger than it, the task should be pruned.
+	pruneHeightDiff = 15
+	pruneInterval   = 5 * time.Second
+	resendInterval  = 2 * time.Second
 	// tryAllPeersTime is the time that a block has not been verified and then try all the valid verify peers.
 	tryAllPeersTime = 15 * time.Second
 )
 
-type VerifyManager struct {
-	bc                   *BlockChain
-	tasks                map[common.Hash]*VerifyTask
-	peers                VerifyPeers
-	verifiedCache        *lru.Cache
-	allowUntrustedVerify bool
-	newTaskCh            chan *types.Header
-	verifyCh             chan common.Hash
-	messageCh            chan VerifyMessage
-	exitCh               chan struct{}
+type remoteVerifyManager struct {
+	bc            *BlockChain
+	tasks         map[common.Hash]*verifyTask
+	peers         verifyPeers
+	verifiedCache *lru.Cache
+	allowInsecure bool
+
+	// Subscription
+	chainHeadCh  chan ChainHeadEvent
+	chainHeadSub event.Subscription
+
+	// Channels
+	verifyCh  chan common.Hash
+	messageCh chan verifyMessage
 }
 
-func NewVerifyManager(blockchain *BlockChain, allowUntrustedVerify bool) *VerifyManager {
+func NewVerifyManager(blockchain *BlockChain, peers verifyPeers, allowUntrusted bool) *remoteVerifyManager {
 	verifiedCache, _ := lru.New(verifiedCacheSize)
-	vm := &VerifyManager{
-		bc:                   blockchain,
-		tasks:                make(map[common.Hash]*VerifyTask),
-		verifiedCache:        verifiedCache,
-		newTaskCh:            make(chan *types.Header),
-		verifyCh:             make(chan common.Hash),
-		messageCh:            make(chan VerifyMessage),
-		exitCh:               make(chan struct{}),
-		allowUntrustedVerify: allowUntrustedVerify,
+	vm := &remoteVerifyManager{
+		bc:            blockchain,
+		tasks:         make(map[common.Hash]*verifyTask),
+		peers:         peers,
+		verifiedCache: verifiedCache,
+		allowInsecure: allowUntrusted,
+
+		chainHeadCh: make(chan ChainHeadEvent, chainHeadChanSize),
+		verifyCh:    make(chan common.Hash, maxForkHeight),
+		messageCh:   make(chan verifyMessage),
 	}
+	vm.chainHeadSub = blockchain.SubscribeChainHeadEvent(vm.chainHeadCh)
 	return vm
 }
 
-func (vm *VerifyManager) verifyManagerLoop() {
-	// read disk store to initial verified cache
+func (vm *remoteVerifyManager) mainLoop() {
+	defer vm.chainHeadSub.Unsubscribe()
+
 	// load unverified blocks in a normalized chain and start a batch of verify task
 	header := vm.bc.CurrentHeader()
 	// Start verify task from H to H-11 if need.
 	vm.NewBlockVerifyTask(header)
-	prune := time.NewTicker(time.Second)
-	defer prune.Stop()
+	pruneTicker := time.NewTicker(pruneInterval)
+	defer pruneTicker.Stop()
 	for {
 		select {
-		case h := <-vm.newTaskCh:
-			vm.NewBlockVerifyTask(h)
+		case h := <-vm.chainHeadCh:
+			vm.NewBlockVerifyTask(h.Block.Header())
 		case hash := <-vm.verifyCh:
 			vm.cacheBlockVerified(hash)
-			rawdb.MarkTrustBlock(vm.bc.db, hash)
 			if task, ok := vm.tasks[hash]; ok {
 				delete(vm.tasks, hash)
 				close(task.terminalCh)
 			}
-		case <-prune.C:
+		case <-pruneTicker.C:
 			for hash, task := range vm.tasks {
-				if vm.bc.CurrentHeader().Number.Uint64()-task.blockHeader.Number.Uint64() > 15 {
+				if vm.bc.CurrentHeader().Number.Cmp(task.blockHeader.Number) == 1 &&
+					vm.bc.CurrentHeader().Number.Uint64()-task.blockHeader.Number.Uint64() > pruneHeightDiff {
 					delete(vm.tasks, hash)
 					close(task.terminalCh)
 				}
@@ -81,34 +92,28 @@ func (vm *VerifyManager) verifyManagerLoop() {
 			if vt, ok := vm.tasks[message.verifyResult.BlockHash]; ok {
 				vt.messageCh <- message
 			}
-		case <-vm.exitCh:
+
+		// System stopped
+		case <-vm.bc.quit:
+			for _, task := range vm.tasks {
+				close(task.terminalCh)
+			}
+			return
+		case <-vm.chainHeadSub.Err():
 			return
 		}
 	}
 }
 
-func (vm *VerifyManager) Stop() {
-	// stop all the tasks
-	for _, task := range vm.tasks {
-		close(task.terminalCh)
-	}
-	close(vm.exitCh)
-}
-
-func (vm *VerifyManager) NewBlockVerifyTask(header *types.Header) {
+func (vm *remoteVerifyManager) NewBlockVerifyTask(header *types.Header) {
 	for i := 0; header != nil && i <= maxForkHeight; i++ {
-		func(hash common.Hash){
+		func(hash common.Hash) {
 			// if verified cache record that this block has been verified, skip.
 			if _, ok := vm.verifiedCache.Get(hash); ok {
 				return
 			}
 			// if there already has a verify task for this block, skip.
 			if _, ok := vm.tasks[hash]; ok {
-				return
-			}
-			// if verified storage record that this block has been verified, skip.
-			if rawdb.IsTrustBlock(vm.bc.db, hash) {
-				vm.cacheBlockVerified(hash)
 				return
 			}
 			diffLayer := vm.bc.GetTrustedDiffLayer(hash)
@@ -118,6 +123,9 @@ func (vm *VerifyManager) NewBlockVerifyTask(header *types.Header) {
 				if diffLayer, err = vm.bc.GenerateDiffLayer(hash); err != nil {
 					log.Error("failed to get diff layer", "block", hash, "number", header.Number, "error", err)
 					return
+				} else {
+					log.Info("this is an empty block:", "block", hash, "number", header.Number)
+					return
 				}
 			}
 			diffHash, err := GetTrustedDiffHash(diffLayer)
@@ -125,14 +133,14 @@ func (vm *VerifyManager) NewBlockVerifyTask(header *types.Header) {
 				log.Error("failed to get diff hash", "block", hash, "number", header.Number, "error", err)
 				return
 			}
-			verifyTask := NewVerifyTask(diffHash, header, vm.peers, vm.bc.db, vm.verifyCh, vm.allowUntrustedVerify)
+			verifyTask := NewVerifyTask(diffHash, header, vm.peers, vm.verifyCh, vm.allowInsecure)
 			vm.tasks[hash] = verifyTask
 		}(header.Hash())
 		header = vm.bc.GetHeaderByHash(header.ParentHash)
 	}
 }
 
-func (vm *VerifyManager) cacheBlockVerified(hash common.Hash) {
+func (vm *remoteVerifyManager) cacheBlockVerified(hash common.Hash) {
 	if vm.verifiedCache.Len() >= verifiedCacheSize {
 		vm.verifiedCache.RemoveOldest()
 	}
@@ -140,7 +148,7 @@ func (vm *VerifyManager) cacheBlockVerified(hash common.Hash) {
 }
 
 // AncestorVerified function check block has been verified or it's a empty block.
-func (vm *VerifyManager) AncestorVerified(header *types.Header) bool {
+func (vm *remoteVerifyManager) AncestorVerified(header *types.Header) bool {
 	// find header of H-11 block.
 	header = vm.bc.GetHeaderByNumber(header.Number.Uint64() - maxForkHeight)
 	// If start from genesis block, there has not a H-11 block.
@@ -150,19 +158,15 @@ func (vm *VerifyManager) AncestorVerified(header *types.Header) bool {
 	// check whether H-11 block is a empty block.
 	if header.TxHash == types.EmptyRootHash {
 		parent := vm.bc.GetHeaderByHash(header.ParentHash)
-		if header.Root == parent.Root {
-			return true
-		}
+		return header.Root == parent.Root
 	}
 	hash := header.Hash()
-	if _, ok := vm.verifiedCache.Get(hash); ok {
-		return true
-	}
-	return rawdb.IsTrustBlock(vm.bc.db, hash)
+	_, exist := vm.verifiedCache.Get(hash)
+	return exist
 }
 
-func (vm *VerifyManager) HandleRootResponse(vr *VerifyResult, pid string) error {
-	vm.messageCh <- VerifyMessage{verifyResult: vr, peerId: pid}
+func (vm *remoteVerifyManager) HandleRootResponse(vr *VerifyResult, pid string) error {
+	vm.messageCh <- verifyMessage{verifyResult: vr, peerId: pid}
 	return nil
 }
 
@@ -173,43 +177,41 @@ type VerifyResult struct {
 	Root        common.Hash
 }
 
-type VerifyMessage struct {
+type verifyMessage struct {
 	verifyResult *VerifyResult
 	peerId       string
 }
 
-type VerifyTask struct {
-	diffhash             common.Hash
-	blockHeader          *types.Header
-	candidatePeers       VerifyPeers
-	BadPeers             map[string]struct{}
-	startAt              time.Time
-	db                   ethdb.Database
-	allowUntrustedVerify bool
+type verifyTask struct {
+	diffhash       common.Hash
+	blockHeader    *types.Header
+	candidatePeers verifyPeers
+	BadPeers       map[string]struct{}
+	startAt        time.Time
+	allowUntrusted bool
 
-	messageCh  chan VerifyMessage
+	messageCh  chan verifyMessage
 	terminalCh chan struct{}
 }
 
-func NewVerifyTask(diffhash common.Hash, header *types.Header, peers VerifyPeers, db ethdb.Database, verifyCh chan common.Hash, allowUntrustedVerify bool) *VerifyTask {
-	vt := &VerifyTask{
-		diffhash:             diffhash,
-		blockHeader:          header,
-		candidatePeers:       peers,
-		BadPeers:             make(map[string]struct{}),
-		db:                   db,
-		allowUntrustedVerify: allowUntrustedVerify,
-		messageCh:            make(chan VerifyMessage),
-		terminalCh:           make(chan struct{}),
+func NewVerifyTask(diffhash common.Hash, header *types.Header, peers verifyPeers, verifyCh chan common.Hash, allowUntrusted bool) *verifyTask {
+	vt := &verifyTask{
+		diffhash:       diffhash,
+		blockHeader:    header,
+		candidatePeers: peers,
+		BadPeers:       make(map[string]struct{}),
+		allowUntrusted: allowUntrusted,
+		messageCh:      make(chan verifyMessage),
+		terminalCh:     make(chan struct{}),
 	}
 	go vt.Start(verifyCh)
 	return vt
 }
 
-func (vt *VerifyTask) Start(verifyCh chan common.Hash) {
+func (vt *verifyTask) Start(verifyCh chan common.Hash) {
 	vt.startAt = time.Now()
 
-	vt.selectPeersToVerify(defaultPeerNumber)
+	vt.sendVerifyRequest(defaultPeerNumber)
 	resend := time.NewTicker(resendInterval)
 	defer resend.Stop()
 	for {
@@ -220,7 +222,7 @@ func (vt *VerifyTask) Start(verifyCh chan common.Hash) {
 				vt.compareRootHashAndWrite(msg, verifyCh)
 			case types.StatusUntrustedVerified:
 				log.Warn("block %s , num= %s is untrusted verified", msg.verifyResult.BlockHash, msg.verifyResult.BlockNumber)
-				if vt.allowUntrustedVerify {
+				if vt.allowUntrusted {
 					vt.compareRootHashAndWrite(msg, verifyCh)
 				}
 			case types.StatusDiffHashMismatch, types.StatusImpossibleFork, types.StatusUnexpectedError:
@@ -232,9 +234,9 @@ func (vt *VerifyTask) Start(verifyCh chan common.Hash) {
 		case <-resend.C:
 			// if a task has run over 15s, try all the vaild peers to verify.
 			if time.Since(vt.startAt) < tryAllPeersTime {
-				vt.selectPeersToVerify(1)
+				vt.sendVerifyRequest(1)
 			} else {
-				vt.selectPeersToVerify(-1)
+				vt.sendVerifyRequest(-1)
 			}
 		case <-vt.terminalCh:
 			return
@@ -242,9 +244,9 @@ func (vt *VerifyTask) Start(verifyCh chan common.Hash) {
 	}
 }
 
-// selectPeersAndVerify func select at most n peers from (candidatePeers-badPeers) randomly and send verify request.
+// sendVerifyRequest func select at most n peers from (candidatePeers-badPeers) randomly and send verify request.
 // when n<0, send to all the peers exclude badPeers.
-func (vt *VerifyTask) selectPeersToVerify(n int) {
+func (vt *verifyTask) sendVerifyRequest(n int) {
 	var validPeers []VerifyPeer
 	candidatePeers := vt.candidatePeers.GetVerifyPeers()
 	for _, p := range candidatePeers {
@@ -252,7 +254,10 @@ func (vt *VerifyTask) selectPeersToVerify(n int) {
 			validPeers = append(validPeers, p)
 		}
 	}
-	// if
+	// if has not valid peer, log warning.
+	if len(validPeers) == 0 {
+		log.Warn("there is no valid peer for block", vt.blockHeader.Number)
+	}
 	if n < 0 || n >= len(validPeers) {
 		for _, p := range validPeers {
 			p.RequestRoot(vt.blockHeader.Number.Uint64(), vt.blockHeader.Hash(), vt.diffhash)
@@ -269,10 +274,9 @@ func (vt *VerifyTask) selectPeersToVerify(n int) {
 	}
 }
 
-func (vt *VerifyTask) compareRootHashAndWrite(msg VerifyMessage, verifyCh chan common.Hash) {
+func (vt *verifyTask) compareRootHashAndWrite(msg verifyMessage, verifyCh chan common.Hash) {
 	if msg.verifyResult.Root == vt.blockHeader.Root {
 		blockhash := msg.verifyResult.BlockHash
-		rawdb.MarkTrustBlock(vt.db, blockhash)
 		// write back to manager so that manager can cache the result and delete this task.
 		verifyCh <- blockhash
 	} else {
@@ -285,14 +289,14 @@ type VerifyPeer interface {
 	ID() string
 }
 
-type VerifyPeers interface {
+type verifyPeers interface {
 	GetVerifyPeers() []VerifyPeer
 }
 
 type VerifyMode uint32
 
 const (
-	LocalVerify VerifyMode = iota //
+	LocalVerify VerifyMode = iota
 	FullVerify
 	InsecureVerify
 	NoneVerify
@@ -348,6 +352,6 @@ func (mode *VerifyMode) UnmarshalText(text []byte) error {
 	return nil
 }
 
-func (mode *VerifyMode) NeedRemoteVerify() bool {
-	return *mode == FullVerify || *mode == InsecureVerify
+func (mode VerifyMode) NeedRemoteVerify() bool {
+	return mode == FullVerify || mode == InsecureVerify
 }

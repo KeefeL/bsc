@@ -1190,7 +1190,6 @@ func (bc *BlockChain) Stop() {
 	close(bc.quit)
 	bc.StopInsert()
 	bc.wg.Wait()
-	bc.validator.StopRemoteVerify()
 
 	// Ensure that the entirety of the state snapshot is journalled to disk.
 	var snapBase common.Hash
@@ -2122,9 +2121,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		blockWriteTimer.Update(time.Since(substart))
 		blockInsertTimer.UpdateSince(start)
 
-		//Start a routine to verify this block.
-		bc.validator.VerifyBlock(block.Header())
-
 		switch status {
 		case CanonStatTy:
 			log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(),
@@ -3023,9 +3019,9 @@ func EnablePersistDiff(limit uint64) BlockChainOption {
 	}
 }
 
-func EnableBlockValidator(chainConfig *params.ChainConfig, engine consensus.Engine, mode *VerifyMode) BlockChainOption {
+func EnableBlockValidator(chainConfig *params.ChainConfig, engine consensus.Engine, mode VerifyMode, peers verifyPeers) BlockChainOption {
 	return func(bc *BlockChain) *BlockChain {
-		bc.validator = NewBlockValidator(chainConfig, bc, engine, mode)
+		bc.validator = NewBlockValidator(chainConfig, bc, engine, mode, peers)
 		return bc
 	}
 }
