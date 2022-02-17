@@ -1,0 +1,112 @@
+package main
+
+import (
+	"github.com/prysmaticlabs/prysm/cmd"
+	"github.com/prysmaticlabs/prysm/cmd/validator/flags"
+	"github.com/prysmaticlabs/prysm/config/features"
+	"github.com/prysmaticlabs/prysm/runtime/tos"
+	"github.com/prysmaticlabs/prysm/validator/accounts"
+	"github.com/urfave/cli/v2"
+)
+
+// Commands for wallets for Prysm validators.
+var walletCommands = &cli.Command{
+	Name:     "wallet",
+	Category: "wallet",
+	Usage:    "defines commands for interacting with Ethereum validator wallets",
+	Subcommands: []*cli.Command{
+		{
+			Name: "create",
+			Usage: "creates a new wallet with a desired type of keymanager: " +
+				"either on-disk (imported), derived, or using remote credentials",
+			Flags: cmd.WrapFlags([]cli.Flag{
+				flags.WalletDirFlag,
+				flags.KeymanagerKindFlag,
+				flags.GrpcRemoteAddressFlag,
+				flags.DisableRemoteSignerTlsFlag,
+				flags.RemoteSignerCertPathFlag,
+				flags.RemoteSignerKeyPathFlag,
+				flags.RemoteSignerCACertPathFlag,
+				flags.WalletPasswordFileFlag,
+				flags.Mnemonic25thWordFileFlag,
+				flags.SkipMnemonic25thWordCheckFlag,
+				features.Mainnet,
+				features.PyrmontTestnet,
+				features.PraterTestnet,
+				cmd.AcceptTosFlag,
+			}),
+			Before: func(cliCtx *cli.Context) error {
+				if err := cmd.LoadFlagsFromConfig(cliCtx, cliCtx.Command.Flags); err != nil {
+					return err
+				}
+				return tos.VerifyTosAcceptedOrPrompt(cliCtx)
+			},
+			Action: func(cliCtx *cli.Context) error {
+				features.ConfigureValidator(cliCtx)
+				if _, err := accounts.CreateAndSaveWalletCli(cliCtx); err != nil {
+					log.Fatalf("Could not create a wallet: %v", err)
+				}
+				return nil
+			},
+		},
+		{
+			Name:  "edit-config",
+			Usage: "edits a wallet configuration options, such as gRPC connection credentials and TLS certificates",
+			Flags: cmd.WrapFlags([]cli.Flag{
+				flags.WalletDirFlag,
+				flags.WalletPasswordFileFlag,
+				flags.GrpcRemoteAddressFlag,
+				flags.DisableRemoteSignerTlsFlag,
+				flags.RemoteSignerCertPathFlag,
+				flags.RemoteSignerKeyPathFlag,
+				flags.RemoteSignerCACertPathFlag,
+				features.Mainnet,
+				features.PyrmontTestnet,
+				features.PraterTestnet,
+				cmd.AcceptTosFlag,
+			}),
+			Before: func(cliCtx *cli.Context) error {
+				if err := cmd.LoadFlagsFromConfig(cliCtx, cliCtx.Command.Flags); err != nil {
+					return err
+				}
+				return tos.VerifyTosAcceptedOrPrompt(cliCtx)
+			},
+			Action: func(cliCtx *cli.Context) error {
+				features.ConfigureValidator(cliCtx)
+				if err := accounts.EditWalletConfigurationCli(cliCtx); err != nil {
+					log.Fatalf("Could not edit wallet configuration: %v", err)
+				}
+				return nil
+			},
+		},
+		{
+			Name:  "recover",
+			Usage: "uses a derived wallet seed recovery phase to recreate an existing HD wallet",
+			Flags: cmd.WrapFlags([]cli.Flag{
+				flags.WalletDirFlag,
+				flags.MnemonicFileFlag,
+				flags.WalletPasswordFileFlag,
+				flags.NumAccountsFlag,
+				flags.Mnemonic25thWordFileFlag,
+				flags.SkipMnemonic25thWordCheckFlag,
+				features.Mainnet,
+				features.PyrmontTestnet,
+				features.PraterTestnet,
+				cmd.AcceptTosFlag,
+			}),
+			Before: func(cliCtx *cli.Context) error {
+				if err := cmd.LoadFlagsFromConfig(cliCtx, cliCtx.Command.Flags); err != nil {
+					return err
+				}
+				return tos.VerifyTosAcceptedOrPrompt(cliCtx)
+			},
+			Action: func(cliCtx *cli.Context) error {
+				features.ConfigureValidator(cliCtx)
+				if err := accounts.RecoverWalletCli(cliCtx); err != nil {
+					log.Fatalf("Could not recover wallet: %v", err)
+				}
+				return nil
+			},
+		},
+	},
+}
