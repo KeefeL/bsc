@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/bn256"
 	"github.com/ethereum/go-ethereum/params"
 
+	"github.com/prysmaticlabs/prysm/crypto/bls"
 	//lint:ignore SA1019 Needed for precompile
 	"golang.org/x/crypto/ripemd160"
 )
@@ -1092,7 +1093,61 @@ func (c *bls12381MapG2) Run(input []byte) ([]byte, error) {
 	return g.EncodePoint(r), nil
 }
 
-// inscriptionLightBlockValidate implemented as a native contract.
+// blsSignatureVerify implements bls signature verification precompile.
+type blsSignatureVerify struct{}
+
+// RequiredGas returns the gas required to execute the pre-compiled contract.
+func (c *blsSignatureVerify) RequiredGas(input []byte) uint64 {
+	return params.BlsSignatureVerifyGas
+}
+
+// input:
+// msg      | signature | [{bls pubkey}] |
+// 32 bytes | 96 bytes  | [{48 bytes}]   |
+func (c *blsSignatureVerify) Run(input []byte) ([]byte, error) {
+	minimumLength := uint64(32) + uint64(96)
+	singlePubkeyLength := uint64(48)
+
+	inputLen := uint64(len(input))
+	if inputLen <= minimumLength || (inputLen-minimumLength)%singlePubkeyLength != 0 {
+		return nil, fmt.Errorf("expected input size %d+%d*N, actual input size: %d", minimumLength, singlePubkeyLength, inputLen)
+	}
+
+	var msg [32]byte
+	msgBytes := getData(input, 0, 32)
+	copy(msg[:], msgBytes)
+
+	signatureBytes := getData(input, 32, 128)
+	sig, err := bls.SignatureFromBytes(signatureBytes)
+	if err != nil {
+		return nil, fmt.Errorf("invalid signature: %v", err)
+	}
+
+	pubKeyNumber := (inputLen - minimumLength) / singlePubkeyLength
+	pubKeys := make([]bls.PublicKey, pubKeyNumber)
+	for i := uint64(0); i < pubKeyNumber; i++ {
+		pubKeyBytes := getData(input, 128+i*singlePubkeyLength, 128+(i+1)*singlePubkeyLength)
+		pubKey, err := bls.PublicKeyFromBytes(pubKeyBytes)
+		if err != nil {
+			return nil, err
+		}
+		pubKeys[i] = pubKey
+	}
+
+	if pubKeyNumber > 1 {
+		if !sig.FastAggregateVerify(pubKeys, msg) {
+			return nil, fmt.Errorf("signature verify failed")
+		}
+	} else {
+		if !sig.Verify(pubKeys[0], msgBytes) {
+			return nil, fmt.Errorf("signature verify failed")
+		}
+	}
+
+	return big1.Bytes(), nil
+}
+
+// inscriptionLightBlockValidate implements light block validation precompile.
 type inscriptionLightBlockValidate struct{}
 
 func (c *inscriptionLightBlockValidate) RequiredGas(input []byte) uint64 {

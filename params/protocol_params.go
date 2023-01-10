@@ -132,6 +132,8 @@ const (
 	TendermintHeaderValidateGas uint64 = 3000 // Gas for validate tendermiint consensus state
 	IAVLMerkleProofValidateGas  uint64 = 3000 // Gas for validate merkle proof
 
+	BlsSignatureVerifyGas uint64 = 3000 // Gas for verify bls signature
+
 	InscriptionLightBlockValidateGas uint64 = 3000 // Gas for validate inscription light block
 
 	EcrecoverGas        uint64 = 3000 // Elliptic curve sender recovery gas price

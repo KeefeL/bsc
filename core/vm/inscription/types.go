@@ -90,7 +90,6 @@ func EncodeInscriptionLightBlockValidationResult(validatorSetChanged bool, conse
 // | chainID   | height   | nextValidatorSetHash | [{validator pubkey, voting power, relayer address, relayer bls pubkey}] |
 // | 32 bytes  | 8 bytes  | 32 bytes             | [{32 bytes, 8 bytes, 20 bytes, 48 bytes}]                               |
 func DecodeConsensusState(input []byte) (ConsensusState, error) {
-
 	minimumLength := chainIDLength + heightLength + validatorSetHashLength
 	singleValidatorBytesLength := validatorPubkeyLength + validatorVotingPowerLength + relayerAddressLength + relayerBlsKeyLength
 
