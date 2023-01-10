@@ -20,10 +20,12 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/core/vm/inscription"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/blake2b"
 	"github.com/ethereum/go-ethereum/crypto/bls12381"
@@ -1088,4 +1090,37 @@ func (c *bls12381MapG2) Run(input []byte) ([]byte, error) {
 
 	// Encode the G2 point to 256 bytes
 	return g.EncodePoint(r), nil
+}
+
+// inscriptionLightBlockValidate implemented as a native contract.
+type inscriptionLightBlockValidate struct{}
+
+func (c *inscriptionLightBlockValidate) RequiredGas(input []byte) uint64 {
+	return params.InscriptionLightBlockValidateGas
+}
+
+func (c *inscriptionLightBlockValidate) Run(input []byte) (result []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("internal error: %v\n", r)
+		}
+	}()
+
+	cs, block, err := inscription.DecodeInscriptionLightBlockValidationInput(input)
+	if err != nil {
+		return nil, err
+	}
+
+	validatorSetChanged, err := cs.ApplyLightBlock(block)
+	if err != nil {
+		return nil, err
+	}
+
+	consensusStateBytes, err := cs.EncodeConsensusState()
+	if err != nil {
+		return nil, err
+	}
+
+	result = inscription.EncodeInscriptionLightBlockValidationResult(validatorSetChanged, consensusStateBytes)
+	return result, nil
 }

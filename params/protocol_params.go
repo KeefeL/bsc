@@ -132,6 +132,8 @@ const (
 	TendermintHeaderValidateGas uint64 = 3000 // Gas for validate tendermiint consensus state
 	IAVLMerkleProofValidateGas  uint64 = 3000 // Gas for validate merkle proof
 
+	InscriptionLightBlockValidateGas uint64 = 3000 // Gas for validate inscription light block
+
 	EcrecoverGas        uint64 = 3000 // Elliptic curve sender recovery gas price
 	Sha256BaseGas       uint64 = 60   // Base price for a SHA256 operation
 	Sha256PerWordGas    uint64 = 12   // Per-word price for a SHA256 operation
