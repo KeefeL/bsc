@@ -1,9 +1,9 @@
-package lightclient
+// Package v1 is used for tendermint v0.31.12 and its compatible version.
+package v1
 
 import (
 	"bytes"
 	"fmt"
-
 	"github.com/tendermint/iavl"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	cmn "github.com/tendermint/tendermint/libs/common"

@@ -1,10 +1,10 @@
-package lightclient
+// Package v1 is used for tendermint v0.31.12 and its compatible version.
+package v1
 
 import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	lerr "github.com/tendermint/tendermint/lite/errors"

@@ -129,8 +129,12 @@ const (
 
 	// Precompiled contract gas prices
 
-	TendermintHeaderValidateGas uint64 = 3000 // Gas for validate tendermiint consensus state
+	TendermintHeaderValidateGas uint64 = 3000 // Gas for validate tendermint consensus state v1
 	IAVLMerkleProofValidateGas  uint64 = 3000 // Gas for validate merkle proof
+
+	BlsSignatureVerifyGas uint64 = 3000 // Gas for verify bls signature
+
+	TendermintLightBlockValidateGas uint64 = 3000 // Gas for validate tendermint consensus state v2
 
 	EcrecoverGas        uint64 = 3000 // Elliptic curve sender recovery gas price
 	Sha256BaseGas       uint64 = 60   // Base price for a SHA256 operation

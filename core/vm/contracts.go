@@ -20,6 +20,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -30,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto/bn256"
 	"github.com/ethereum/go-ethereum/params"
 
+	"github.com/prysmaticlabs/prysm/crypto/bls"
 	//lint:ignore SA1019 Needed for precompile
 	"golang.org/x/crypto/ripemd160"
 )
@@ -109,6 +111,8 @@ var PrecompiledContractsIsMoran = map[common.Address]PrecompiledContract{
 
 	common.BytesToAddress([]byte{100}): &tmHeaderValidate{},
 	common.BytesToAddress([]byte{101}): &iavlMerkleProofValidateMoran{},
+	common.BytesToAddress([]byte{102}): &blsSignatureVerify{},
+	common.BytesToAddress([]byte{103}): &tmLightBlockValidate{},
 }
 
 // PrecompiledContractsBerlin contains the default set of pre-compiled Ethereum
@@ -1088,4 +1092,58 @@ func (c *bls12381MapG2) Run(input []byte) ([]byte, error) {
 
 	// Encode the G2 point to 256 bytes
 	return g.EncodePoint(r), nil
+}
+
+// blsSignatureVerify implements bls signature verification precompile.
+type blsSignatureVerify struct{}
+
+// RequiredGas returns the gas required to execute the pre-compiled contract.
+func (c *blsSignatureVerify) RequiredGas(input []byte) uint64 {
+	return params.BlsSignatureVerifyGas
+}
+
+// input:
+// msg      | signature | [{bls pubkey}] |
+// 32 bytes | 96 bytes  | [{48 bytes}]   |
+func (c *blsSignatureVerify) Run(input []byte) ([]byte, error) {
+	minimumLength := uint64(32) + uint64(96)
+	singlePubkeyLength := uint64(48)
+
+	inputLen := uint64(len(input))
+	if inputLen <= minimumLength || (inputLen-minimumLength)%singlePubkeyLength != 0 {
+		return nil, fmt.Errorf("expected input size %d+%d*N, actual input size: %d", minimumLength, singlePubkeyLength, inputLen)
+	}
+
+	var msg [32]byte
+	msgBytes := getData(input, 0, 32)
+	copy(msg[:], msgBytes)
+
+	signatureBytes := getData(input, 32, 96)
+	sig, err := bls.SignatureFromBytes(signatureBytes)
+	if err != nil {
+		return nil, fmt.Errorf("invalid signature: %v", err)
+	}
+
+	pubKeyNumber := (inputLen - minimumLength) / singlePubkeyLength
+	pubKeys := make([]bls.PublicKey, pubKeyNumber)
+	for i := uint64(0); i < pubKeyNumber; i++ {
+		pubKeyBytes := getData(input, 128+i*singlePubkeyLength, 48)
+		pubKey, err := bls.PublicKeyFromBytes(pubKeyBytes)
+		if err != nil {
+			return nil, err
+		}
+		pubKeys[i] = pubKey
+	}
+
+	if pubKeyNumber > 1 {
+		if !sig.FastAggregateVerify(pubKeys, msg) {
+			return nil, fmt.Errorf("signature verify failed")
+		}
+	} else {
+		if !sig.Verify(pubKeys[0], msgBytes) {
+			return nil, fmt.Errorf("signature verify failed")
+		}
+	}
+
+	return big1.Bytes(), nil
 }

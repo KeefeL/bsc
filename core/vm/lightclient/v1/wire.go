@@ -1,4 +1,5 @@
-package lightclient
+// Package v1 is used for tendermint v0.31.12 and its compatible version.
+package v1
 
 import (
 	"github.com/tendermint/go-amino"

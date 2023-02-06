@@ -8,7 +8,8 @@ import (
 	"github.com/tendermint/tendermint/crypto/merkle"
 	cmn "github.com/tendermint/tendermint/libs/common"
 
-	"github.com/ethereum/go-ethereum/core/vm/lightclient"
+	"github.com/ethereum/go-ethereum/core/vm/lightclient/v1"
+	"github.com/ethereum/go-ethereum/core/vm/lightclient/v2"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -24,17 +25,17 @@ const (
 // input:
 // consensus state length | consensus state | tendermint header |
 // 32 bytes               |                 |                   |
-func decodeTendermintHeaderValidationInput(input []byte) (*lightclient.ConsensusState, *lightclient.Header, error) {
+func decodeTendermintHeaderValidationInput(input []byte) (*v1.ConsensusState, *v1.Header, error) {
 	csLen := binary.BigEndian.Uint64(input[consensusStateLengthBytesLength-uint64TypeLength : consensusStateLengthBytesLength])
 	if uint64(len(input)) <= consensusStateLengthBytesLength+csLen {
 		return nil, nil, fmt.Errorf("expected payload size %d, actual size: %d", consensusStateLengthBytesLength+csLen, len(input))
 	}
 
-	cs, err := lightclient.DecodeConsensusState(input[consensusStateLengthBytesLength : consensusStateLengthBytesLength+csLen])
+	cs, err := v1.DecodeConsensusState(input[consensusStateLengthBytesLength : consensusStateLengthBytesLength+csLen])
 	if err != nil {
 		return nil, nil, err
 	}
-	header, err := lightclient.DecodeHeader(input[consensusStateLengthBytesLength+csLen:])
+	header, err := v1.DecodeHeader(input[consensusStateLengthBytesLength+csLen:])
 	if err != nil {
 		return nil, nil, err
 	}
@@ -42,7 +43,8 @@ func decodeTendermintHeaderValidationInput(input []byte) (*lightclient.Consensus
 	return &cs, header, nil
 }
 
-// tmHeaderValidate implemented as a native contract.
+// tmHeaderValidate implemented as a native contract. Used to validate the light
+// client's new header for tendermint v0.31.12 and its compatible version.
 type tmHeaderValidate struct{}
 
 func (c *tmHeaderValidate) RequiredGas(input []byte) uint64 {
@@ -173,7 +175,7 @@ func (c *basicIavlMerkleProofValidate) Run(input []byte) (result []byte, err err
 		return nil, fmt.Errorf("invalid input: input size should be %d, actual the size is %d", payloadLength+precompileContractInputMetaDataLength, len(input))
 	}
 
-	kvmp, err := lightclient.DecodeKeyValueMerkleProof(input[precompileContractInputMetaDataLength:])
+	kvmp, err := v1.DecodeKeyValueMerkleProof(input[precompileContractInputMetaDataLength:])
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +214,7 @@ func multiStoreOpVerifier(op merkle.ProofOperator) error {
 	if op == nil {
 		return nil
 	}
-	if mop, ok := op.(lightclient.MultiStoreProofOp); ok {
+	if mop, ok := op.(v1.MultiStoreProofOp); ok {
 		storeNames := make(map[string]bool, len(mop.Proof.StoreInfos))
 		for _, store := range mop.Proof.StoreInfos {
 			if exist := storeNames[store.Name]; exist {
@@ -240,4 +242,38 @@ func singleValueOpVerifier(op merkle.ProofOperator) error {
 		}
 	}
 	return nil
+}
+
+// tmLightBlockValidate implemented as a native contract. Used to validate the light
+// blocks for tendermint v0.34.22 and its compatible version.
+type tmLightBlockValidate struct{}
+
+func (c *tmLightBlockValidate) RequiredGas(input []byte) uint64 {
+	return params.TendermintLightBlockValidateGas
+}
+
+func (c *tmLightBlockValidate) Run(input []byte) (result []byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("internal error: %v\n", r)
+		}
+	}()
+
+	cs, block, err := v2.DecodeLightBlockValidationInput(input)
+	if err != nil {
+		return nil, err
+	}
+
+	validatorSetChanged, err := cs.ApplyLightBlock(block)
+	if err != nil {
+		return nil, err
+	}
+
+	consensusStateBytes, err := cs.EncodeConsensusState()
+	if err != nil {
+		return nil, err
+	}
+
+	result = v2.EncodeLightBlockValidationResult(validatorSetChanged, consensusStateBytes)
+	return result, nil
 }

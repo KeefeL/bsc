@@ -1,8 +1,8 @@
-package lightclient
+// Package v1 is used for tendermint v0.31.12 and its compatible version.
+package v1
 
 import (
 	"fmt"
-
 	rpcclient "github.com/tendermint/tendermint/rpc/client"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
