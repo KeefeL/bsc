@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common/systemcontract"
 	"io"
 	"math"
 	"math/big"
@@ -14,8 +15,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/ethereum/go-ethereum/common/systemcontract"
 
 	lru "github.com/hashicorp/golang-lru"
 	"golang.org/x/crypto/sha3"
@@ -1069,32 +1068,31 @@ func (p *Parlia) distributeIncoming(val common.Address, state *state.StateDB, he
 	balance := state.GetBalance(consensus.SystemAddress)
 	state.SetBalance(consensus.SystemAddress, big.NewInt(0))
 	state.AddBalance(coinbase, balance)
-	rewards := big.NewInt(0).Abs(balance)
-	if rules := p.chainConfig.Rules(header.Number); rules.HasBlockRewards {
-		blockRewards := p.chainConfig.Parlia.BlockRewards
-		// if we have enabled block rewards and rewards are greater than 0 then
-		if blockRewards != nil && blockRewards.Cmp(common.Big0) > 0 {
-			state.AddBalance(coinbase, blockRewards)
-			rewards = rewards.Add(rewards, blockRewards)
+
+	if balance.Cmp(common.Big0) > 0 {
+		doDistributeSysReward := state.GetBalance(common.HexToAddress(systemcontract.SystemRewardContract)).Cmp(maxSystemBalance) < 0
+		if doDistributeSysReward {
+			var SysRewards = new(big.Int)
+			SysRewards = SysRewards.Rsh(balance, systemRewardPercent)
+			if SysRewards.Cmp(common.Big0) > 0 {
+				err := p.distributeToSystem(SysRewards, state, header, chain, txs, receipts, receivedTxs, usedGas, mining)
+				if err != nil {
+					return err
+				}
+				log.Trace("distribute to system reward pool", "block hash", header.Hash(), "amount", SysRewards)
+				balance = balance.Sub(balance, SysRewards)
+			}
 		}
+	}
+	rewards := big.NewInt(0).Abs(balance)
+	blockRewards := p.BlockRewards(header.Number)
+	if blockRewards != nil {
+		rewards = rewards.Add(rewards, blockRewards)
+		state.AddBalance(coinbase, blockRewards)
 	}
 	if rewards.Cmp(common.Big0) <= 0 {
 		return nil
 	}
-	// remove 1/16 reward according to netmarble
-	//doDistributeSysReward := state.GetBalance(common.HexToAddress(systemcontract.SystemRewardContract)).Cmp(maxSystemBalance) < 0
-	//if doDistributeSysReward {
-	//	var rewards = new(big.Int)
-	//	rewards = rewards.Rsh(balance, systemRewardPercent)
-	//	if rewards.Cmp(common.Big0) > 0 {
-	//		err := p.distributeToSystem(rewards, state, header, chain, txs, receipts, receivedTxs, usedGas, mining)
-	//		if err != nil {
-	//			return err
-	//		}
-	//		log.Trace("distribute to system reward pool", "block hash", header.Hash(), "amount", rewards)
-	//		balance = balance.Sub(balance, rewards)
-	//	}
-	//}
 	log.Trace("distribute to validator contract", "block hash", header.Hash(), "amount", rewards)
 	return p.distributeToValidator(rewards, val, state, header, chain, txs, receipts, receivedTxs, usedGas, mining)
 }

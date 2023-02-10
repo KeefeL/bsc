@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/gopool"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/common/systemcontract"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/core"
@@ -1197,7 +1198,7 @@ func (s *PublicBlockChainAPI) replay(ctx context.Context, block *types.Block, ac
 
 	// Recompute transactions.
 	signer := types.MakeSigner(s.b.ChainConfig(), block.Number())
-	for _, tx := range block.Transactions() {
+	for i, tx := range block.Transactions() {
 		// Skip data empty tx and to is one of the interested accounts tx.
 		skip := false
 		if len(tx.Data()) == 0 {
@@ -1233,9 +1234,11 @@ func (s *PublicBlockChainAPI) replay(ctx context.Context, block *types.Block, ac
 					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0))
 					statedb.AddBalance(block.Header().Coinbase, balance)
 				}
-				blockRewards := posa.BlockRewards(block.Header().Number)
-				if blockRewards != nil {
-					statedb.AddBalance(context.Coinbase, blockRewards)
+				if i == len(block.Transactions())-1 && tx.To().Hex() == systemcontract.ValidatorContract {
+					blockRewards := posa.BlockRewards(block.Header().Number)
+					if blockRewards != nil {
+						statedb.AddBalance(context.Coinbase, blockRewards)
+					}
 				}
 			}
 		}

@@ -3,4 +3,5 @@
 	url = https://github.com/ethereum/tests
 [submodule "genesis"]
 	path = genesis
-	url = https://github.com/Ankr-network/bas-genesis-config.git
+	url = https://github.com/node-real/semita-bas-genesis-config
+	branch = semita_base

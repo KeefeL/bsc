@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/gopool"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/common/systemcontract"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -281,6 +282,7 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 						BlockHash: task.block.Hash(),
 						TxIndex:   i,
 						TxHash:    tx.Hash(),
+						TxCount:   len(task.block.Transactions()),
 					}
 					res, err := api.traceTx(localctx, msg, txctx, blockCtx, task.statedb, config)
 					if err != nil {
@@ -540,10 +542,13 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0))
 					statedb.AddBalance(vmctx.Coinbase, balance)
 				}
-				blockRewards := posa.BlockRewards(block.Header().Number)
-				if blockRewards != nil {
-					statedb.AddBalance(vmctx.Coinbase, blockRewards)
+				if i == len(block.Transactions())-1 && tx.To().Hex() == systemcontract.ValidatorContract {
+					blockRewards := posa.BlockRewards(block.Header().Number)
+					if blockRewards != nil {
+						statedb.AddBalance(vmctx.Coinbase, blockRewards)
+					}
 				}
+
 			}
 
 		}
@@ -626,6 +631,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 					BlockHash: blockHash,
 					TxIndex:   task.index,
 					TxHash:    txs[task.index].Hash(),
+					TxCount:   len(txs),
 				}
 				res, err := api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
 				if err != nil {
@@ -645,7 +651,6 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 
 		// Generate the next state snapshot fast without tracing
 		msg, _ := tx.AsMessage(signer)
-
 		if posa, ok := api.backend.Engine().(consensus.PoSA); ok {
 			if isSystem, _ := posa.IsSystemTransaction(tx, block.Header()); isSystem {
 				balance := statedb.GetBalance(consensus.SystemAddress)
@@ -653,9 +658,11 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0))
 					statedb.AddBalance(block.Header().Coinbase, balance)
 				}
-				blockRewards := posa.BlockRewards(block.Header().Number)
-				if blockRewards != nil {
-					statedb.AddBalance(block.Header().Coinbase, blockRewards)
+				if i == len(txs)-1 && tx.To().Hex() == systemcontract.ValidatorContract {
+					blockRewards := posa.BlockRewards(block.Header().Number)
+					if blockRewards != nil {
+						statedb.AddBalance(block.Header().Coinbase, blockRewards)
+					}
 				}
 			}
 		}
@@ -781,9 +788,11 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 					statedb.SetBalance(consensus.SystemAddress, big.NewInt(0))
 					statedb.AddBalance(vmctx.Coinbase, balance)
 				}
-				blockRewards := posa.BlockRewards(block.Header().Number)
-				if blockRewards != nil {
-					statedb.AddBalance(vmctx.Coinbase, blockRewards)
+				if i == len(block.Transactions())-1 && tx.To().Hex() == systemcontract.ValidatorContract {
+					blockRewards := posa.BlockRewards(block.Header().Number)
+					if blockRewards != nil {
+						statedb.AddBalance(vmctx.Coinbase, blockRewards)
+					}
 				}
 			}
 		}
@@ -849,6 +858,7 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 		BlockHash: blockHash,
 		TxIndex:   int(index),
 		TxHash:    hash,
+		TxCount:   len(block.Transactions()),
 	}
 	return api.traceTx(ctx, msg, txctx, vmctx, statedb, config)
 }
@@ -951,9 +961,11 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 			statedb.SetBalance(consensus.SystemAddress, big.NewInt(0))
 			statedb.AddBalance(vmctx.Coinbase, balance)
 		}
-		blockRewards := posa.BlockRewards(vmctx.BlockNumber)
-		if blockRewards != nil {
-			statedb.AddBalance(vmctx.Coinbase, blockRewards)
+		if txctx.TxIndex == txctx.TxCount-1 && message.To().Hex() == systemcontract.ValidatorContract {
+			blockRewards := posa.BlockRewards(vmctx.BlockNumber)
+			if blockRewards != nil {
+				statedb.AddBalance(vmctx.Coinbase, blockRewards)
+			}
 		}
 
 	}

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/systemcontract"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -201,9 +202,11 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 				statedb.SetBalance(consensus.SystemAddress, big.NewInt(0))
 				statedb.AddBalance(context.Coinbase, balance)
 			}
-			blockRewards := posa.BlockRewards(block.Header().Number)
-			if blockRewards != nil {
-				statedb.AddBalance(context.Coinbase, blockRewards)
+			if idx == len(block.Transactions())-1 && tx.To().Hex() == systemcontract.ValidatorContract {
+				blockRewards := posa.BlockRewards(block.Header().Number)
+				if blockRewards != nil {
+					statedb.AddBalance(context.Coinbase, blockRewards)
+				}
 			}
 		}
 		statedb.Prepare(tx.Hash(), block.Hash(), idx)
