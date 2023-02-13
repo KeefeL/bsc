@@ -1051,41 +1051,50 @@ func (p *Parlia) getCurrentValidators(blockHash common.Hash) ([]common.Address, 
 	}
 	return valz, nil
 }
+func (p *Parlia) BlockRewards(blockNumber *big.Int) *big.Int {
+	if rules := p.chainConfig.Rules(blockNumber); rules.HasBlockRewards {
+		blockRewards := p.chainConfig.Parlia.BlockRewards
+		if blockRewards != nil && blockRewards.Cmp(common.Big0) > 0 {
+			return blockRewards
+		}
+	}
+	return nil
+}
 
 // slash spoiled validators
 func (p *Parlia) distributeIncoming(val common.Address, state *state.StateDB, header *types.Header, chain core.ChainContext,
 	txs *[]*types.Transaction, receipts *[]*types.Receipt, receivedTxs *[]*types.Transaction, usedGas *uint64, mining bool) error {
 	coinbase := header.Coinbase
 	balance := state.GetBalance(consensus.SystemAddress)
-	if balance.Cmp(common.Big0) <= 0 {
-		return nil
-	}
 	state.SetBalance(consensus.SystemAddress, big.NewInt(0))
 	state.AddBalance(coinbase, balance)
 
-	if rules := p.chainConfig.Rules(header.Number); rules.HasBlockRewards {
-		blockRewards := p.chainConfig.Parlia.BlockRewards
-		// if we have enabled block rewards and rewards are greater than 0 then
-		if blockRewards != nil && blockRewards.Cmp(common.Big0) > 0 {
-			state.AddBalance(coinbase, blockRewards)
-		}
-	}
-
-	doDistributeSysReward := state.GetBalance(common.HexToAddress(systemcontract.SystemRewardContract)).Cmp(maxSystemBalance) < 0
-	if doDistributeSysReward {
-		var rewards = new(big.Int)
-		rewards = rewards.Rsh(balance, systemRewardPercent)
-		if rewards.Cmp(common.Big0) > 0 {
-			err := p.distributeToSystem(rewards, state, header, chain, txs, receipts, receivedTxs, usedGas, mining)
-			if err != nil {
-				return err
+	/*	if balance.Cmp(common.Big0) > 0 {
+		doDistributeSysReward := state.GetBalance(common.HexToAddress(systemcontract.SystemRewardContract)).Cmp(maxSystemBalance) < 0
+		if doDistributeSysReward {
+			var SysRewards = new(big.Int)
+			SysRewards = SysRewards.Rsh(balance, systemRewardPercent)
+			if SysRewards.Cmp(common.Big0) > 0 {
+				err := p.distributeToSystem(SysRewards, state, header, chain, txs, receipts, receivedTxs, usedGas, mining)
+				if err != nil {
+					return err
+				}
+				log.Trace("distribute to system reward pool", "block hash", header.Hash(), "amount", SysRewards)
+				balance = balance.Sub(balance, SysRewards)
 			}
-			log.Trace("distribute to system reward pool", "block hash", header.Hash(), "amount", rewards)
-			balance = balance.Sub(balance, rewards)
 		}
+	}*/
+	rewards := big.NewInt(0).Abs(balance)
+	blockRewards := p.BlockRewards(header.Number)
+	if blockRewards != nil {
+		rewards = rewards.Add(rewards, blockRewards)
+		state.AddBalance(coinbase, blockRewards)
 	}
-	log.Trace("distribute to validator contract", "block hash", header.Hash(), "amount", balance)
-	return p.distributeToValidator(balance, val, state, header, chain, txs, receipts, receivedTxs, usedGas, mining)
+	if rewards.Cmp(common.Big0) <= 0 {
+		return nil
+	}
+	log.Trace("distribute to validator contract", "block hash", header.Hash(), "amount", rewards)
+	return p.distributeToValidator(rewards, val, state, header, chain, txs, receipts, receivedTxs, usedGas, mining)
 }
 
 // slash spoiled validators
