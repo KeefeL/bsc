@@ -1069,7 +1069,7 @@ func (p *Parlia) distributeIncoming(val common.Address, state *state.StateDB, he
 	state.SetBalance(consensus.SystemAddress, big.NewInt(0))
 	state.AddBalance(coinbase, balance)
 
-	if balance.Cmp(common.Big0) > 0 {
+	/*	if balance.Cmp(common.Big0) > 0 {
 		doDistributeSysReward := state.GetBalance(common.HexToAddress(systemcontract.SystemRewardContract)).Cmp(maxSystemBalance) < 0
 		if doDistributeSysReward {
 			var SysRewards = new(big.Int)
@@ -1083,7 +1083,7 @@ func (p *Parlia) distributeIncoming(val common.Address, state *state.StateDB, he
 				balance = balance.Sub(balance, SysRewards)
 			}
 		}
-	}
+	}*/
 	rewards := big.NewInt(0).Abs(balance)
 	blockRewards := p.BlockRewards(header.Number)
 	if blockRewards != nil {
