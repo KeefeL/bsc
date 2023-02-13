@@ -1,0 +1,79 @@
+name: release
+
+on:
+  create:
+    tags:
+      - v*
+  push:
+    branches: [ semita_base ]
+  pull_request:
+    branches: [ semita_base ]
+
+env:
+  REGION: us-east-1
+  ECR_REGISTRY_ID: 553885929720
+  AWS_ASSUMED_ROLE_ARN: arn:aws:iam::553885929720:role/tf_nodereal_prod_ecr_cicd_deployment_assume_role
+  # Notice: must modify here to fit your service config path
+  GIT_SYNC_PATH: qa/gitops/qa-us/demo-app/values.yaml
+  TAG_FIELD: .image.tag
+
+jobs:
+  CI:
+    runs-on: [self-hosted,qa-infra-k8s]
+    steps:
+    - uses: actions/checkout@v3
+    # - uses: actions/setup-go@v3
+    #   with:
+    #     go-version: 1.18
+    # - name: golangci-lint
+    #   uses: golangci/golangci-lint-action@v3
+    #   with:
+    #     # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
+    #     version: v1.45.2
+    - name: aws assume role
+      id: aws-assume-role
+      run: |
+        UUID=$(cat /proc/sys/kernel/random/uuid)
+        OUT=$(aws sts assume-role --role-arn $AWS_ASSUMED_ROLE_ARN --role-session-name $UUID)
+        echo ::set-output name=aws_access_key_id::"$(echo $OUT | jq -r '.Credentials''.AccessKeyId')"
+        echo ::set-output name=aws_secret_key::"$(echo $OUT | jq -r '.Credentials''.SecretAccessKey')"
+        echo ::set-output name=aws_sessions_token::"$(echo $OUT | jq -r '.Credentials''.SessionToken')"
+    - name: Build, tag, and push image to Amazon ECR
+      env:
+        AWS_ACCESS_KEY_ID: ${{ steps.aws-assume-role.outputs.aws_access_key_id }}
+        AWS_SECRET_ACCESS_KEY: ${{ steps.aws-assume-role.outputs.aws_secret_key }}
+        AWS_SESSION_TOKEN: ${{ steps.aws-assume-role.outputs.aws_sessions_token }}
+      run: |
+        aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY_ID}.dkr.ecr.${REGION}.amazonaws.com
+        aws ecr --region $REGION describe-repositories --registry-id $ECR_REGISTRY_ID --repository-names ${GITHUB_REPOSITORY#*/} || aws ecr --region $REGION create-repository --registry-id $ECR_REGISTRY_ID --repository-name ${GITHUB_REPOSITORY#*/}
+        aws ecr --region $REGION set-repository-policy --registry-id $ECR_REGISTRY_ID --repository-name ${GITHUB_REPOSITORY#*/} --policy-text file:///home/runner/repo-access-permissions.json
+        docker build -t ${ECR_REGISTRY_ID}.dkr.ecr.${REGION}.amazonaws.com/${GITHUB_REPOSITORY#*/}:${GITHUB_SHA} .
+        docker push ${ECR_REGISTRY_ID}.dkr.ecr.${REGION}.amazonaws.com/${GITHUB_REPOSITORY#*/}:${GITHUB_SHA}
+  # CD:
+  #   needs: [CI]
+  #   runs-on: [self-hosted,qa-infra-k8s]
+  #   steps:
+  #   - name: clone the gitops config repo
+  #     uses: actions/checkout@v3
+  #     with:
+  #       repository: node-real/nodereal-app
+  #       token: ${{ secrets.GO_MODULES_TOKEN }}
+  #   - name: update image tag in gitops config repo
+  #     env:
+  #       GIT_SYNC_PATH: ${{ env.GIT_SYNC_PATH }}
+  #       TAG_FIELD: ${{ env.TAG_FIELD }}
+  #     run: |
+  #       yq e "$TAG_FIELD = \"${GITHUB_REF#refs/*/}\"" -i $GIT_SYNC_PATH
+  #   - name: Set PR branch name
+  #     id: vars
+  #     run: echo ::set-output name=branch-name::"github-action-patches/${GITHUB_SHA::7}"
+  #   - name: Create Pull Request
+  #     uses: peter-evans/create-pull-request@v4
+  #     with:
+  #       token: ${{ secrets.GO_MODULES_TOKEN }}
+  #       commit-message: update image tag
+  #       title: github action CD auto-update
+  #       labels: |
+  #         lgtm
+  #       body: TGIF
+  #       branch: ${{ steps.vars.outputs.branch-name }}
