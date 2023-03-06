@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/bnb-chain/inscription-tendermint/crypto/ed25519"
-	tmproto "github.com/bnb-chain/inscription-tendermint/proto/tendermint/types"
-	"github.com/bnb-chain/inscription-tendermint/types"
+	"github.com/bnb-chain/greenfield-tendermint/crypto/ed25519"
+	tmproto "github.com/bnb-chain/greenfield-tendermint/proto/tendermint/types"
+	"github.com/bnb-chain/greenfield-tendermint/types"
 )
 
 type validatorInfo struct {

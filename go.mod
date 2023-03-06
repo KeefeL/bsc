@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.1.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.1.1
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.1.1
-	github.com/bnb-chain/inscription-tendermint v0.0.0-20230109153449-9536f52eee78
+	github.com/bnb-chain/greenfield-tendermint v0.0.3-0.20230306025023-b5d1292e58ef
 	github.com/btcsuite/btcd v0.22.1
 	github.com/cespare/cp v1.1.1
 	github.com/cloudflare/cloudflare-go v0.14.0
@@ -49,6 +49,7 @@ require (
 	github.com/panjf2000/ants/v2 v2.4.5
 	github.com/peterh/liner v1.2.0
 	github.com/prometheus/tsdb v0.10.0
+	github.com/prysmaticlabs/prysm v0.0.0-20220124113610-e26cde5e091b
 	github.com/rjeczalik/notify v0.9.1
 	github.com/rs/cors v1.8.2
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible
@@ -68,8 +69,6 @@ require (
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
-
-require github.com/prysmaticlabs/prysm v0.0.0-20220124113610-e26cde5e091b
 
 require (
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect

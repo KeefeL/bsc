@@ -6,10 +6,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/bnb-chain/inscription-tendermint/crypto/ed25519"
-	"github.com/bnb-chain/inscription-tendermint/light"
-	tmproto "github.com/bnb-chain/inscription-tendermint/proto/tendermint/types"
-	"github.com/bnb-chain/inscription-tendermint/types"
+	"github.com/bnb-chain/greenfield-tendermint/crypto/ed25519"
+	"github.com/bnb-chain/greenfield-tendermint/light"
+	tmproto "github.com/bnb-chain/greenfield-tendermint/proto/tendermint/types"
+	"github.com/bnb-chain/greenfield-tendermint/types"
 )
 
 const (
