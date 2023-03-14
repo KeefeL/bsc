@@ -18,8 +18,11 @@ package vm
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/prysmaticlabs/prysm/crypto/bls"
 	"io/ioutil"
 	"testing"
 	"time"
@@ -390,4 +393,33 @@ func BenchmarkPrecompiledBLS12381G2MultiExpWorstCase(b *testing.B) {
 		NoBenchmark: false,
 	}
 	benchmarkPrecompiled("0f", testcase, b)
+}
+
+func TestPrecompileBlsSignatureVerify(t *testing.T) {
+	message := "test bls signature verification"
+	msgHash := crypto.Keccak256Hash([]byte(message))
+
+	sigs := make([]bls.Signature, 3)
+	privKey1, _ := bls.RandKey()
+	privKey2, _ := bls.RandKey()
+	privKey3, _ := bls.RandKey()
+	sigs[0] = privKey1.Sign(msgHash[:])
+	sigs[1] = privKey2.Sign(msgHash[:])
+	sigs[2] = privKey3.Sign(msgHash[:])
+
+	aggSig := bls.AggregateSignatures(sigs)
+	input := make([]byte, 0)
+	input = append(input, msgHash[:]...)
+	input = append(input, aggSig.Marshal()[:]...)
+	input = append(input, privKey1.PublicKey().Marshal()[:]...)
+	input = append(input, privKey2.PublicKey().Marshal()[:]...)
+	input = append(input, privKey3.PublicKey().Marshal()[:]...)
+
+	contract := &blsSignatureVerify{}
+	res, err := contract.Run(input)
+	if err != nil {
+		t.Fatalf("run bls signature verification failed: %v", err)
+	}
+
+	t.Logf("verification result: %s\n", hex.EncodeToString(res))
 }

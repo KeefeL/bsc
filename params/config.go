@@ -107,6 +107,29 @@ var (
 		nil,
 		nil, nil,
 	}
+
+	// GoerliChainConfig contains the chain parameters to run a node on the Görli test network.
+	GoerliChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(5),
+		HomesteadBlock:      big.NewInt(0),
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		RamanujanBlock:      big.NewInt(0),
+		NielsBlock:          big.NewInt(0),
+		MirrorSyncBlock:     big.NewInt(0),
+		BrunoBlock:          big.NewInt(0),
+		IstanbulBlock:       big.NewInt(1_561_651),
+		MuirGlacierBlock:    nil,
+		BerlinBlock:         big.NewInt(4_460_644),
+		Clique: &CliqueConfig{
+			Period: 15,
+			Epoch:  30000,
+		},
+	}
 )
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and
@@ -543,8 +566,8 @@ type Rules struct {
 	IsHomestead, IsEIP150, IsEIP155, IsEIP158               bool
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsCatalyst                                    bool
-	HasRuntimeUpgrade, HasDeployerProxy bool
-	HasBlockRewards      bool
+	HasRuntimeUpgrade, HasDeployerProxy                     bool
+	HasBlockRewards                                         bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -554,19 +577,19 @@ func (c *ChainConfig) Rules(num *big.Int) Rules {
 		chainID = new(big.Int)
 	}
 	return Rules{
-		ChainID:              new(big.Int).Set(chainID),
-		IsHomestead:          c.IsHomestead(num),
-		IsEIP150:             c.IsEIP150(num),
-		IsEIP155:             c.IsEIP155(num),
-		IsEIP158:             c.IsEIP158(num),
-		IsByzantium:          c.IsByzantium(num),
-		IsConstantinople:     c.IsConstantinople(num),
-		IsPetersburg:         c.IsPetersburg(num),
-		IsIstanbul:           c.IsIstanbul(num),
-		IsBerlin:             c.IsBerlin(num),
-		IsCatalyst:           c.IsCatalyst(num),
-		HasRuntimeUpgrade:    c.HasRuntimeUpgrade(num),
-		HasDeployerProxy:     c.HasDeployerProxy(num),
-		HasBlockRewards:      c.IsBlockRewardsBlock(num),
+		ChainID:           new(big.Int).Set(chainID),
+		IsHomestead:       c.IsHomestead(num),
+		IsEIP150:          c.IsEIP150(num),
+		IsEIP155:          c.IsEIP155(num),
+		IsEIP158:          c.IsEIP158(num),
+		IsByzantium:       c.IsByzantium(num),
+		IsConstantinople:  c.IsConstantinople(num),
+		IsPetersburg:      c.IsPetersburg(num),
+		IsIstanbul:        c.IsIstanbul(num),
+		IsBerlin:          c.IsBerlin(num),
+		IsCatalyst:        c.IsCatalyst(num),
+		HasRuntimeUpgrade: c.HasRuntimeUpgrade(num),
+		HasDeployerProxy:  c.HasDeployerProxy(num),
+		HasBlockRewards:   c.IsBlockRewardsBlock(num),
 	}
 }
